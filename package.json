@@ -1,0 +1,1 @@
+{"name": "browser-mcp-demo", "version": "1.0.0", "description": "浏览器 MCP 服务器演示", "main": "mcp_client_node.js", "scripts": {"start": "node mcp_client_node.js"}, "keywords": ["mcp", "browser", "automation"], "author": "", "license": "MIT", "dependencies": {"@modelcontextprotocol/sdk": "^1.0.0"}}
