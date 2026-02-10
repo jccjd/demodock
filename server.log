@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/home/f/demodock/iflow_browser_server.py", line 78, in <module>
+    class ACPConnectionManager:
+    ...<17 lines>...
+                await connection.send_text(message)
+  File "/home/f/demodock/iflow_browser_server.py", line 84, in ACPConnectionManager
+    async def connect(self, websocket: WebSocket):
+                                       ^^^^^^^^^
+NameError: name 'WebSocket' is not defined

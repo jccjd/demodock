@@ -14,14 +14,15 @@ import sys
 import json
 import asyncio
 import logging
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, List
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
+import websockets
 
 # 导入 iFlow SDK
 try:
@@ -70,6 +71,88 @@ class BrowserTask(BaseModel):
     """浏览器任务请求"""
     task: str
     timeout: Optional[float] = TIMEOUT
+
+# ============================================================================
+# ACP WebSocket 管理
+# ============================================================================
+
+class ACPConnectionManager:
+    """ACP WebSocket 连接管理器"""
+
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+# 创建连接管理器实例
+manager = ACPConnectionManager()
+
+# 连接到 ACP 服务器
+import websockets
+import json
+
+ACP_WS_URL = "ws://localhost:8090/acp"
+acp_ws = None
+
+async def connect_to_acp():
+    """连接到 ACP 服务器"""
+    global acp_ws
+    try:
+        acp_ws = await websockets.connect(ACP_WS_URL)
+        logger.info(f"✅ 已连接到 ACP 服务器: {ACP_WS_URL}")
+        return True
+    except Exception as e:
+        logger.error(f"❌ 连接 ACP 失败: {e}")
+        return False
+
+async def forward_to_acp(message: str) -> AsyncGenerator[str, None]:
+    """
+    转发消息到 ACP 并流式返回响应
+
+    Args:
+        message: 要发送到 ACP 的消息
+
+    Yields:
+        响应消息片段
+    """
+    global acp_ws
+
+    try:
+        # 如果未连接，尝试连接
+        if acp_ws is None or acp_ws.closed:
+            success = await connect_to_acp()
+            if not success:
+                yield json.dumps({"status": "error", "error": "无法连接到 ACP 服务器"})
+                return
+
+        # 发送消息到 ACP
+        await acp_ws.send(message)
+
+        # 接收响应
+        async for response in acp_ws:
+            logger.debug(f"收到 ACP 响应: {response}")
+
+            # 过滤系统消息（以 // 开头的）
+            if response.startswith('//'):
+                continue
+
+            yield response
+
+    except Exception as e:
+        logger.error(f"ACP 通信错误: {e}")
+        yield json.dumps({"status": "error", "error": str(e)})
 
 # ============================================================================
 # iFlow 客户端管理
@@ -195,6 +278,85 @@ async def execute_stream_task(task: str) -> AsyncGenerator[dict, None]:
 # API 端点
 # ============================================================================
 
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket 端点 - 用于前端直接连接"""
+    await manager.connect(websocket)
+    try:
+        while True:
+            # 接收前端消息
+            data = await websocket.receive_text()
+            logger.info(f"收到前端消息: {data}")
+
+            try:
+                # 转发到 ACP 并流式返回响应
+                async for response in forward_to_acp(data):
+                    await websocket.send_text(response)
+            except Exception as e:
+                logger.error(f"处理消息失败: {e}")
+                await websocket.send_text(json.dumps({"status": "error", "error": str(e)}))
+
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        logger.info("WebSocket 连接断开")
+    except Exception as e:
+        logger.error(f"WebSocket 错误: {e}")
+        manager.disconnect(websocket)
+
+@app.post("/acp/task")
+async def acp_task(request: BrowserTask):
+    """
+    通过 ACP 执行任务（流式响应）
+
+    请求格式:
+    {
+        "task": "你好",
+        "timeout": 300.0
+    }
+
+    响应格式（SSE）:
+    data: {"chunk": "...", "full_response": "...", "status": "streaming"}
+    """
+    async def event_generator():
+        try:
+            yield f"data: {json.dumps({'status': 'started', 'task': request.task}, ensure_ascii=False)}\n\n"
+
+            # 构造 JSON 格式的消息
+            message = json.dumps({
+                "type": "message",
+                "content": request.task,
+                "timestamp": datetime.now().isoformat()
+            })
+
+            full_response = ""
+            async for response in forward_to_acp(message):
+                try:
+                    parsed = json.loads(response)
+                    if parsed.get('content'):
+                        chunk = parsed['content']
+                        full_response += chunk
+                        yield f"data: {json.dumps({'chunk': chunk, 'full_response': full_response, 'status': 'streaming'}, ensure_ascii=False)}\n\n"
+                except json.JSONDecodeError:
+                    # 如果不是 JSON，直接作为内容
+                    full_response += response
+                    yield f"data: {json.dumps({'chunk': response, 'full_response': full_response, 'status': 'streaming'}, ensure_ascii=False)}\n\n"
+
+            yield f"data: {json.dumps({'status': 'completed', 'full_response': full_response}, ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            logger.error(f"ACP 任务错误: {e}")
+            yield f"data: {json.dumps({'status': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
 @app.get("/")
 async def root():
     """服务信息"""
@@ -308,9 +470,9 @@ async def shutdown_event():
 if __name__ == "__main__":
     print("""
     ╔════════════════════════════════════════════════════════════════════╗
-    ║      🤖 iFlow 浏览器自动化服务                                     ║
-    ║      版本: 2.0.0                                                   ║
-    ║      架构: FastAPI → iFlow SDK → MCP 浏览器                        ║
+    ║      🤖 iFlow 浏览器自动化服务                                        ║
+    ║      版本: 2.0.0                                                    ║
+    ║      架构: FastAPI → iFlow SDK → MCP 浏览器                          ║
     ╚════════════════════════════════════════════════════════════════════╝
     """)
 

@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>VIBE Studio - Integrated Test Environment</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #ffffff; color: #333; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .sidebar-icon-active { border-left: 2px solid #2563eb; color: #2563eb !important; background: #f0f7ff; }
+        .vnc-area { background: #f3f4f6; position: relative; }
+        .custom-scrollbar::-webkit-scrollbar { width: 3px; height: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+        .ide-panel-header { background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-[13px]">
+
+    <!-- 顶部菜单/工具栏 (全局状态) -->
+    <header class="h-10 border-b border-slate-200 flex items-center justify-between px-4 bg-white z-50">
+        <div class="flex items-center space-x-6">
+            <div class="flex items-center space-x-2">
+                <div class="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white font-bold text-[10px]">V</div>
+                <span class="font-bold text-slate-700 tracking-tight">VIBE STUDIO</span>
+            </div>
+            <div class="flex items-center space-x-1 text-slate-400">
+                <span>Projects</span>
+                <span class="text-slate-300">/</span>
+                <span class="text-slate-900 font-medium italic">cTDP_Consistency_Test</span>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2 px-3 py-1 bg-green-50 rounded-full border border-green-100">
+                <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                <span class="text-[10px] text-green-700 font-bold uppercase tracking-wider">Hygon 7002 Connected</span>
+            </div>
+            <button class="bg-blue-600 text-white px-4 py-1 rounded text-[11px] font-bold shadow-sm hover:bg-blue-700">Submit Report</button>
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- 1. 左侧最窄侧边栏 (Activity Bar) -->
+        <nav class="w-12 border-r border-slate-200 flex flex-col items-center py-4 space-y-6 bg-white">
+            <div class="sidebar-icon-active p-2 text-slate-400 hover:text-blue-600 transition-colors cursor-pointer">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" stroke-width="2"></path></svg>
+            </div>
+            <div class="p-2 text-slate-400 hover:text-blue-600 transition-colors cursor-pointer">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke-width="2"></path></svg>
+            </div>
+            <div class="p-2 text-slate-400 hover:text-blue-600 transition-colors cursor-pointer">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-width="2"></path></svg>
+            </div>
+        </nav>
+
+        <!-- 2. 左侧主侧边栏 (Explorer - Step Info) -->
+        <aside class="w-64 border-r border-slate-200 flex flex-col bg-white">
+            <div class="ide-panel-header px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                Test Case Explorer
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scrollbar py-2">
+                <!-- 测试用例信息组 -->
+                <div class="px-4 py-2 group">
+                    <div class="flex items-center text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-tighter">
+                        <svg class="w-3 h-3 mr-1 transform rotate-90" fill="currentColor" viewBox="0 0 20 20"><path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"></path></svg>
+                        Steps Details
+                    </div>
+                    <div class="space-y-1 ml-4 border-l border-slate-100">
+                        <div class="pl-4 py-1 text-blue-600 font-bold bg-blue-50 border-r-2 border-blue-600 cursor-pointer">01. BIOS Config <span class="text-[9px] opacity-50 ml-2">Active</span></div>
+                        <div class="pl-4 py-1 text-slate-500 hover:bg-slate-50 cursor-pointer">02. BMC Event Log <span class="text-[9px] opacity-50 ml-2 italic">Waiting</span></div>
+                        <div class="pl-4 py-1 text-slate-500 hover:bg-slate-50 cursor-pointer">03. OS Power Stress <span class="text-[9px] opacity-50 ml-2 italic">Waiting</span></div>
+                        <div class="pl-4 py-1 text-slate-500 hover:bg-slate-50 cursor-pointer">04. Topology Verify <span class="text-[9px] opacity-50 ml-2 italic">Final</span></div>
+                    </div>
+                </div>
+
+                <div class="px-4 py-6">
+                    <div class="flex items-center text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest italic">Target Specification</div>
+                    <div class="p-3 bg-slate-50 rounded-lg text-[11px] text-slate-500 leading-relaxed border border-slate-100">
+                        Hygon CBS -> NBIO -> cTDP Control -> Manual (Target: 280W)
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 3. 中间核心视图区 (Main View - VNC + Panel) -->
+        <main class="flex-1 flex flex-col min-w-0 bg-[#f9fafb]">
+            <!-- 标签页 -->
+            <div class="h-9 bg-slate-100/50 flex items-end px-4 border-b border-slate-200">
+                <div class="px-4 py-2 bg-white border border-b-0 border-slate-200 text-[11px] font-bold text-blue-600 flex items-center space-x-2 rounded-t-md">
+                    <span class="w-2 h-2 bg-indigo-500 rounded-full"></span>
+                    <span>BIOS Console (Serial)</span>
+                    <span class="text-slate-300 ml-2 hover:text-slate-600 cursor-pointer">×</span>
+                </div>
+                <div class="px-4 py-2 text-[11px] font-medium text-slate-400 hover:text-slate-600 flex items-center space-x-2 cursor-pointer transition-all">
+                    <span class="w-2 h-2 bg-slate-300 rounded-full"></span>
+                    <span>BMC Web (noVNC)</span>
+                </div>
+            </div>
+
+            <!-- VNC 主视窗 (就像代码编辑区) -->
+            <div class="flex-1 vnc-area overflow-hidden flex flex-col">
+                <div class="flex-1 bg-black m-6 rounded-2xl shadow-2xl overflow-hidden border border-slate-800 flex flex-col relative">
+                    <!-- HUD 提示层 -->
+                    <div class="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-blue-600 text-white text-[10px] font-bold rounded-full shadow-lg flex items-center space-x-2 z-10">
+                        <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                        <span>AI ATTACHED: Intercepting BIOS Boot...</span>
+                    </div>
+                    <!-- VNC 内容模拟 -->
+                    <div class="flex-1 flex flex-col p-10 font-mono text-sm leading-relaxed text-blue-100">
+                        <p class="text-slate-500 border-b border-slate-800 pb-2 mb-4 italic">Remote Connection: Hygon-7002-Node [Active]</p>
+                        <p>> Advanced Chipset Configuration</p>
+                        <p class="bg-blue-600 text-white px-2 mt-2 w-max italic">  cTDP Control: [Manual]</p>
+                        <p class="mt-1">  - cTDP: [0]</p>
+                        <p class="mt-1 text-slate-500 italic">  - Current Status: Saving settings...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底部面板 (Terminal/Output) -->
+            <div class="h-48 border-t border-slate-200 bg-white flex flex-col shadow-inner">
+                <div class="ide-panel-header px-4 flex items-center space-x-6 h-8 shrink-0">
+                    <button class="text-[10px] font-bold text-slate-900 border-b-2 border-blue-600 pb-1">OUTPUT</button>
+                    <button class="text-[10px] font-bold text-slate-400 hover:text-slate-600 pb-1">DEBUG CONSOLE</button>
+                    <button class="text-[10px] font-bold text-slate-400 hover:text-slate-600 pb-1">REAL-TIME LOGS</button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 custom-scrollbar mono text-[11px] text-slate-600 leading-loose">
+                    <div class="flex space-x-4"><span class="text-blue-500">[14:21:05]</span><span class="text-slate-400">INFO: Powering on target system...</span></div>
+                    <div class="flex space-x-4"><span class="text-blue-500">[14:21:08]</span><span class="text-slate-400">INFO: AI Agent detected serial output "Hygon Setup Ready".</span></div>
+                    <div class="flex space-x-4"><span class="text-indigo-500 font-bold">[14:21:12]</span><span class="text-indigo-600">COMMAND: AI sending 'F2' interrupt key... success.</span></div>
+                    <div class="flex space-x-4"><span class="text-emerald-500">[14:21:15]</span><span class="text-slate-500 italic">SYSTEM: Context switched to BIOS Console.</span></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 4. 右侧侧边栏 (AI Co-Tester - 融合 ai_browser_chat) -->
+        <aside class="w-96 border-l border-slate-200 flex flex-col bg-gradient-to-b from-slate-50 to-white">
+            <!-- 顶部连接状态 -->
+            <div class="px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-between shadow-sm">
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                    </div>
+                    <div>
+                        <div class="text-white font-bold text-sm">AI Co-Tester</div>
+                        <div class="text-blue-100 text-[10px]">通过 iFlow Browser Server</div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span id="ws-status-dot" class="w-2.5 h-2.5 bg-slate-400 rounded-full"></span>
+                    <span id="ws-status-text" class="text-[10px] text-blue-100 font-medium">未连接</span>
+                </div>
+            </div>
+
+            <!-- 示例指令 -->
+            <div class="px-4 py-3 bg-white border-b border-slate-100">
+                <div class="text-[10px] text-slate-400 font-medium mb-2">💡 快捷指令:</div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="quickCommand('帮我打开百度搜索人工智能')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-medium hover:bg-blue-100 transition-colors">搜索人工智能</button>
+                    <button onclick="quickCommand('列出当前工作目录的文件')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-medium hover:bg-blue-100 transition-colors">列出文件</button>
+                    <button onclick="quickCommand('帮我分析 demo.html 的结构')" class="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-[10px] font-medium hover:bg-blue-100 transition-colors">分析代码</button>
+                </div>
+            </div>
+
+            <!-- 对话记录 -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                <div class="flex justify-center">
+                    <div class="text-[10px] text-slate-400 bg-slate-50 px-3 py-2 rounded-full flex items-center space-x-2">
+                        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <span>等待连接到服务器...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 输入区域 -->
+            <div class="p-4 bg-white border-t border-slate-200 shadow-lg">
+                <div class="relative">
+                    <textarea id="chat-input" rows="3" placeholder="输入指令... (Ctrl+Enter 发送)" class="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 pr-12 text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all resize-none placeholder:text-slate-400 shadow-inner" disabled></textarea>
+                    <button id="send-btn" class="absolute right-3 bottom-3 p-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg shadow-md hover:shadow-lg disabled:bg-slate-300 disabled:cursor-not-allowed transition-all" disabled>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- AI Chat WebSocket 连接脚本 -->
+    <script>
+        // WebSocket 配置 - 连接到 iflow_browser_server
+        const WS_URL = 'ws://localhost:8082/ws';
+        let ws = null;
+        let isConnected = false;
+
+        // DOM 元素
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+        const statusDot = document.getElementById('ws-status-dot');
+        const statusText = document.getElementById('ws-status-text');
+
+        // 连接到 WebSocket 服务器
+        function connectWebSocket() {
+            console.log('尝试连接到:', WS_URL);
+
+            try {
+                ws = new WebSocket(WS_URL);
+
+                ws.onopen = () => {
+                    console.log('WebSocket 连接成功');
+                    isConnected = true;
+                    updateConnectionStatus(true);
+                    clearMessages();
+                    addSystemMessage('已连接到 iFlow Browser Server');
+                    enableInput(true);
+                };
+
+                ws.onmessage = (event) => {
+                    console.log('收到消息:', event.data);
+                    const data = event.data;
+
+                    try {
+                        const parsed = JSON.parse(data);
+                        handleMessage(parsed);
+                    } catch (e) {
+                        // 如果不是 JSON，直接显示为文本
+                        addAIMessage(data);
+                    }
+                };
+
+                ws.onclose = (event) => {
+                    console.log('WebSocket 连接关闭:', event.code, event.reason);
+                    isConnected = false;
+                    updateConnectionStatus(false);
+                    addSystemMessage('与服务器断开连接');
+                    enableInput(false);
+                    // 5秒后重连
+                    setTimeout(connectWebSocket, 5000);
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket 错误:', error);
+                    addSystemMessage('连接错误，请检查服务器是否运行');
+                };
+
+            } catch (error) {
+                console.error('连接失败:', error);
+                addSystemMessage('无法连接到服务器: ' + error.message);
+                // 5秒后重试
+                setTimeout(connectWebSocket, 5000);
+            }
+        }
+
+        // 处理收到的消息
+        function handleMessage(data) {
+            if (data.type === 'assistant' || data.type === 'stream' || data.type === 'message') {
+                addAIMessage(data.content || data.message || data.text || '');
+            } else if (data.type === 'tool_use') {
+                addToolMessage(data.tool, data.args);
+            } else if (data.type === 'system') {
+                addSystemMessage(data.message || data.content || '');
+            } else if (data.type === 'error') {
+                addErrorMessage(data.error || data.message || '');
+            } else if (data.status === 'error') {
+                addErrorMessage(data.error);
+            } else if (data.chunk) {
+                // 流式响应片段
+                updateLastAIMessage(data.full_response || data.chunk);
+            } else {
+                // 尝试显示内容
+                if (data.content || data.message || data.text) {
+                    addAIMessage(data.content || data.message || data.text);
+                }
+            }
+        }
+
+        // 添加 AI 消息
+        function addAIMessage(content) {
+            if (!content) return;
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'flex justify-start';
+            msgDiv.innerHTML = `
+                <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-3 rounded-2xl rounded-tl-none shadow-md text-xs leading-relaxed max-w-[90%]">
+                    ${escapeHtml(content)}
+                </div>
+            `;
+            chatMessages.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        // 更新最后一条 AI 消息（用于流式响应）
+        function updateLastAIMessage(content) {
+            const messages = chatMessages.querySelectorAll('.flex.justify-start');
+            if (messages.length > 0) {
+                const lastMsg = messages[messages.length - 1];
+                const contentDiv = lastMsg.querySelector('div');
+                if (contentDiv) {
+                    contentDiv.textContent = content;
+                }
+            } else {
+                addAIMessage(content);
+            }
+            scrollToBottom();
+        }
+
+        // 添加用户消息
+        function addUserMessage(content) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'flex justify-end';
+            msgDiv.innerHTML = `
+                <div class="bg-slate-200 p-3 rounded-2xl rounded-tr-none shadow text-xs leading-relaxed max-w-[90%]">
+                    ${escapeHtml(content)}
+                </div>
+            `;
+            chatMessages.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        // 添加系统消息
+        function addSystemMessage(content) {
+            if (!content) return;
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'flex justify-center';
+            msgDiv.innerHTML = `
+                <div class="text-[10px] text-slate-400 bg-slate-50 px-3 py-1.5 rounded-full flex items-center space-x-1">
+                    <span>${escapeHtml(content)}</span>
+                </div>
+            `;
+            chatMessages.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        // 添加工具调用消息
+        function addToolMessage(tool, args) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'space-y-1';
+            msgDiv.innerHTML = `
+                <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">🔧 Tool Use</div>
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                    <div class="font-bold text-blue-600 mb-1">${escapeHtml(tool)}</div>
+                    <div class="text-slate-500 font-mono text-[10px]">${args ? escapeHtml(JSON.stringify(args, null, 2)) : '无参数'}</div>
+                </div>
+            `;
+            chatMessages.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        // 添加错误消息
+        function addErrorMessage(content) {
+            if (!content) return;
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'space-y-1';
+            msgDiv.innerHTML = `
+                <div class="text-[9px] font-bold text-red-400 uppercase tracking-wider">❌ Error</div>
+                <div class="bg-red-50 p-3 rounded-xl border border-red-200 text-xs text-red-700">
+                    ${escapeHtml(content)}
+                </div>
+            `;
+            chatMessages.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        // 清空消息
+        function clearMessages() {
+            chatMessages.innerHTML = '';
+        }
+
+        // 更新连接状态
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                statusDot.className = 'w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse';
+                statusText.textContent = '已连接';
+                statusText.className = 'text-[10px] text-green-400 font-medium';
+            } else {
+                statusDot.className = 'w-2.5 h-2.5 bg-slate-400 rounded-full';
+                statusText.textContent = '未连接';
+                statusText.className = 'text-[10px] text-slate-400 font-medium';
+            }
+        }
+
+        // 启用/禁用输入
+        function enableInput(enabled) {
+            chatInput.disabled = !enabled;
+            sendBtn.disabled = !enabled;
+            if (enabled) {
+                chatInput.placeholder = '输入指令... (Ctrl+Enter 发送)';
+                chatInput.classList.remove('bg-slate-100');
+            } else {
+                chatInput.placeholder = '等待连接...';
+                chatInput.classList.add('bg-slate-100');
+            }
+        }
+
+        // 发送消息
+        function sendMessage() {
+            const content = chatInput.value.trim();
+            if (!content || !isConnected) return;
+
+            // 显示用户消息
+            addUserMessage(content);
+            chatInput.value = '';
+
+            // 发送到服务器
+            try {
+                ws.send(content);
+                console.log('发送消息:', content);
+            } catch (error) {
+                addErrorMessage('发送失败: ' + error.message);
+            }
+        }
+
+        // 快捷命令
+        function quickCommand(cmd) {
+            chatInput.value = cmd;
+            sendMessage();
+        }
+
+        // HTML 转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 滚动到底部
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // 事件监听
+        sendBtn.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // 页面加载后自动连接
+        window.addEventListener('load', () => {
+            connectWebSocket();
+        });
+    </script>
+
+</body>
+</html>
