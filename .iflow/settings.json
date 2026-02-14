@@ -1,10 +1,9 @@
 {
-  "mcpServers": {
-    "aio-sandbox": {
-      "httpUrl": "http://localhost:8080/mcp",
-      "headers": {
-        "Accept": "application/json, text/event-stream"
-      }
+  "acpUrl": "ws://localhost:8090/acp",
+  "mcpServers": [
+    {
+      "name": "aio-sandbox",
+      "httpUrl": "http://localhost:8080/mcp"
     }
-  }
+  ]
 }

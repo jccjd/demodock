@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-iFlow 浏览器自动化服务 - 使用 iFlow SDK + MCP
-基于 iFlow CLI 和 MCP 协议实现浏览器自动化
-aaa
-功能：
-- 使用 iFlow SDK 连接到 MCP 浏览器服务
-- 提供 SSE 流式响应
+iFlow 浏览器自动化服务
+
+使用 iFlow SDK + MCP 实现浏览器自动化，支持：
+- WebSocket 实时通信
+- SSE 流式响应
 - 实时返回 AI 思考和操作过程
 """
 
@@ -22,7 +21,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
-import websockets
 
 # 导入 iFlow SDK
 try:
@@ -99,61 +97,6 @@ class ACPConnectionManager:
 # 创建连接管理器实例
 manager = ACPConnectionManager()
 
-# 连接到 ACP 服务器
-import websockets
-import json
-
-ACP_WS_URL = "ws://localhost:8090/acp"
-acp_ws = None
-
-async def connect_to_acp():
-    """连接到 ACP 服务器"""
-    global acp_ws
-    try:
-        acp_ws = await websockets.connect(ACP_WS_URL)
-        logger.info(f"✅ 已连接到 ACP 服务器: {ACP_WS_URL}")
-        return True
-    except Exception as e:
-        logger.error(f"❌ 连接 ACP 失败: {e}")
-        return False
-
-async def forward_to_acp(message: str) -> AsyncGenerator[str, None]:
-    """
-    转发消息到 ACP 并流式返回响应
-
-    Args:
-        message: 要发送到 ACP 的消息
-
-    Yields:
-        响应消息片段
-    """
-    global acp_ws
-
-    try:
-        # 如果未连接，尝试连接
-        if acp_ws is None or acp_ws.closed:
-            success = await connect_to_acp()
-            if not success:
-                yield json.dumps({"status": "error", "error": "无法连接到 ACP 服务器"})
-                return
-
-        # 发送消息到 ACP
-        await acp_ws.send(message)
-
-        # 接收响应
-        async for response in acp_ws:
-            logger.debug(f"收到 ACP 响应: {response}")
-
-            # 过滤系统消息（以 // 开头的）
-            if response.startswith('//'):
-                continue
-
-            yield response
-
-    except Exception as e:
-        logger.error(f"ACP 通信错误: {e}")
-        yield json.dumps({"status": "error", "error": str(e)})
-
 # ============================================================================
 # iFlow 客户端管理
 # ============================================================================
@@ -169,7 +112,7 @@ async def create_iflow_client() -> IFlowClient:
 
         # 文件系统访问
         file_access=True,
-        file_allowed_dirs=["/home/f/demodock"],
+        file_allowed_dirs=["/Users/zz/Desktop/codes/demodock"],
 
         # MCP 服务器配置 - HTTP 方式
         mcp_servers=[
@@ -280,8 +223,9 @@ async def execute_stream_task(task: str) -> AsyncGenerator[dict, None]:
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket 端点 - 用于前端直接连接"""
+    """WebSocket 端点 - 用于前端直接连接，使用 iFlow SDK 处理任务"""
     await manager.connect(websocket)
+    client = None
     try:
         while True:
             # 接收前端消息
@@ -289,12 +233,71 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.info(f"收到前端消息: {data}")
 
             try:
-                # 转发到 ACP 并流式返回响应
-                async for response in forward_to_acp(data):
-                    await websocket.send_text(response)
+                # 创建 iFlow 客户端
+                client = await create_iflow_client()
+                await client.__aenter__()
+
+                # 发送任务
+                await client.send_message(data)
+
+                # 接收响应流
+                full_response = ""
+                async for message in client.receive_messages():
+                    logger.debug(f"收到消息: {message}")
+
+                    # 处理不同类型的消息
+                    if hasattr(message, 'type'):
+                        if message.type == 'assistant':
+                            # AI 响应消息
+                            chunk = ""
+                            if hasattr(message, 'chunk') and message.chunk:
+                                chunk = message.chunk.text or ""
+                                full_response += chunk
+                                # 发送流式响应
+                                await websocket.send_text(json.dumps({
+                                    'type': 'assistant',
+                                    'chunk': chunk,
+                                    'full_response': full_response,
+                                    'status': 'streaming'
+                                }, ensure_ascii=False))
+
+                        elif message.type == 'tool_call':
+                            # 工具调用消息
+                            await websocket.send_text(json.dumps({
+                                'type': 'tool_use',
+                                'tool': message.tool_name if hasattr(message, 'tool_name') else message.label,
+                                'status': message.status,
+                                'args': getattr(message, 'arguments', {})
+                            }, ensure_ascii=False))
+
+                        elif message.type == 'plan':
+                            # 计划消息
+                            entries = []
+                            if hasattr(message, 'entries'):
+                                for entry in message.entries:
+                                    entries.append({
+                                        'content': entry.content,
+                                        'priority': entry.priority,
+                                        'status': entry.status
+                                    })
+                            await websocket.send_text(json.dumps({
+                                'type': 'plan',
+                                'entries': entries
+                            }, ensure_ascii=False))
+
+                        elif message.type == 'task_finish':
+                            # 任务完成
+                            await websocket.send_text(json.dumps({
+                                'type': 'task_finish',
+                                'stop_reason': message.stop_reason,
+                                'full_response': full_response,
+                                'status': 'completed'
+                            }, ensure_ascii=False))
+                            break
+
             except Exception as e:
                 logger.error(f"处理消息失败: {e}")
-                await websocket.send_text(json.dumps({"status": "error", "error": str(e)}))
+                await websocket.send_text(json.dumps({"type": "error", "error": str(e)}, ensure_ascii=False))
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -302,11 +305,18 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket 错误: {e}")
         manager.disconnect(websocket)
+    finally:
+        # 清理资源
+        if client:
+            try:
+                await client.__aexit__(None, None, None)
+            except Exception as e:
+                logger.error(f"清理客户端失败: {e}")
 
 @app.post("/acp/task")
 async def acp_task(request: BrowserTask):
     """
-    通过 ACP 执行任务（流式响应）
+    通过 iFlow SDK 执行任务（流式响应）
 
     请求格式:
     {
@@ -318,34 +328,49 @@ async def acp_task(request: BrowserTask):
     data: {"chunk": "...", "full_response": "...", "status": "streaming"}
     """
     async def event_generator():
+        client = None
         try:
             yield f"data: {json.dumps({'status': 'started', 'task': request.task}, ensure_ascii=False)}\n\n"
 
-            # 构造 JSON 格式的消息
-            message = json.dumps({
-                "type": "message",
-                "content": request.task,
-                "timestamp": datetime.now().isoformat()
-            })
+            # 创建 iFlow 客户端
+            client = await create_iflow_client()
+            await client.__aenter__()
 
+            # 发送任务
+            await client.send_message(request.task)
+
+            # 接收响应流
             full_response = ""
-            async for response in forward_to_acp(message):
-                try:
-                    parsed = json.loads(response)
-                    if parsed.get('content'):
-                        chunk = parsed['content']
-                        full_response += chunk
-                        yield f"data: {json.dumps({'chunk': chunk, 'full_response': full_response, 'status': 'streaming'}, ensure_ascii=False)}\n\n"
-                except json.JSONDecodeError:
-                    # 如果不是 JSON，直接作为内容
-                    full_response += response
-                    yield f"data: {json.dumps({'chunk': response, 'full_response': full_response, 'status': 'streaming'}, ensure_ascii=False)}\n\n"
+            async for message in client.receive_messages():
+                logger.debug(f"收到消息: {message}")
+
+                # 处理不同类型的消息
+                if hasattr(message, 'type'):
+                    if message.type == 'assistant':
+                        # AI 响应消息
+                        chunk = ""
+                        if hasattr(message, 'chunk') and message.chunk:
+                            chunk = message.chunk.text or ""
+                            full_response += chunk
+                            yield f"data: {json.dumps({'chunk': chunk, 'full_response': full_response, 'status': 'streaming'}, ensure_ascii=False)}\n\n"
+
+                    elif message.type == 'task_finish':
+                        # 任务完成
+                        yield f"data: {json.dumps({'status': 'completed', 'full_response': full_response}, ensure_ascii=False)}\n\n"
+                        break
 
             yield f"data: {json.dumps({'status': 'completed', 'full_response': full_response}, ensure_ascii=False)}\n\n"
 
         except Exception as e:
-            logger.error(f"ACP 任务错误: {e}")
+            logger.error(f"任务执行错误: {e}")
             yield f"data: {json.dumps({'status': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+        finally:
+            # 清理资源
+            if client:
+                try:
+                    await client.__aexit__(None, None, None)
+                except Exception as e:
+                    logger.error(f"清理客户端失败: {e}")
 
     return StreamingResponse(
         event_generator(),
@@ -471,7 +496,7 @@ if __name__ == "__main__":
     print("""
     ╔════════════════════════════════════════════════════════════════════╗
     ║      🤖 iFlow 浏览器自动化服务                                        ║
-    ║      版本: 2.0.0                                                    ║
+    ║      版本: 2.1.0                                                    ║
     ║      架构: FastAPI → iFlow SDK → MCP 浏览器                          ║
     ╚════════════════════════════════════════════════════════════════════╝
     """)
@@ -485,8 +510,12 @@ if __name__ == "__main__":
     print("📚 API 文档: http://localhost:8082/docs")
     print()
     print("🧪 测试方法:")
-    print("   1. 前端: 打开 ai_browser_chat.html")
+    print("   1. 前端: 打开 frontend/index.html")
     print("   2. 命令行: curl -X POST http://localhost:8082/browser/stream-task -d '{\"task\":\"打开百度\"}'")
+    print()
+    print("⚠️  启动依赖:")
+    print("   1. iflow --experimental-acp --port 8090")
+    print("   2. uv run python src/server.py")
     print()
 
     # 启动服务器

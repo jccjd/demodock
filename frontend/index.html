@@ -35,7 +35,7 @@
                 <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
                 <span class="text-[10px] text-green-700 font-bold uppercase tracking-wider">Hygon 7002 Connected</span>
             </div>
-            <button class="bg-blue-600 text-white px-4 py-1 rounded text-[11px] font-bold shadow-sm hover:bg-blue-700">Submit Report</button>
+            <button class="bg-blue-600 text-white px-4 py-1 rounded text-[11px] font-bold shadow-sm hover:bg-blue-700" onclick="submitReport()">Submit Report</button>
         </div>
     </header>
 
@@ -87,12 +87,12 @@
         <main class="flex-1 flex flex-col min-w-0 bg-[#f9fafb]">
             <!-- 标签页 -->
             <div class="h-9 bg-slate-100/50 flex items-end px-4 border-b border-slate-200">
-                <div class="px-4 py-2 bg-white border border-b-0 border-slate-200 text-[11px] font-bold text-blue-600 flex items-center space-x-2 rounded-t-md">
+                <div id="tab-bios" class="px-4 py-2 bg-white border border-b-0 border-slate-200 text-[11px] font-bold text-blue-600 flex items-center space-x-2 rounded-t-md cursor-pointer" onclick="switchTab('bios')">
                     <span class="w-2 h-2 bg-indigo-500 rounded-full"></span>
                     <span>BIOS Console (Serial)</span>
                     <span class="text-slate-300 ml-2 hover:text-slate-600 cursor-pointer">×</span>
                 </div>
-                <div class="px-4 py-2 text-[11px] font-medium text-slate-400 hover:text-slate-600 flex items-center space-x-2 cursor-pointer transition-all">
+                <div id="tab-bmc" class="px-4 py-2 text-[11px] font-medium text-slate-400 hover:text-slate-600 flex items-center space-x-2 cursor-pointer transition-all" onclick="switchTab('bmc')">
                     <span class="w-2 h-2 bg-slate-300 rounded-full"></span>
                     <span>BMC Web (noVNC)</span>
                 </div>
@@ -106,14 +106,14 @@
                         <span class="w-2 h-2 bg-white rounded-full animate-pulse"></span>
                         <span>AI ATTACHED: Intercepting BIOS Boot...</span>
                     </div>
-                    <!-- VNC 内容模拟 -->
-                    <div class="flex-1 flex flex-col p-10 font-mono text-sm leading-relaxed text-blue-100">
-                        <p class="text-slate-500 border-b border-slate-800 pb-2 mb-4 italic">Remote Connection: Hygon-7002-Node [Active]</p>
-                        <p>> Advanced Chipset Configuration</p>
-                        <p class="bg-blue-600 text-white px-2 mt-2 w-max italic">  cTDP Control: [Manual]</p>
-                        <p class="mt-1">  - cTDP: [0]</p>
-                        <p class="mt-1 text-slate-500 italic">  - Current Status: Saving settings...</p>
-                    </div>
+                    <!-- VNC 容器 -->
+                    <iframe 
+                        id="vnc-frame"
+                        src="http://localhost:8080/vnc/index.html?autoconnect=true"
+                        class="w-full h-full border-0"
+                        title="VNC Console"
+                        allowfullscreen>
+                    </iframe>
                 </div>
             </div>
 
@@ -143,7 +143,7 @@
                     </div>
                     <div>
                         <div class="text-white font-bold text-sm">AI Co-Tester</div>
-                        <div class="text-blue-100 text-[10px]">通过 iFlow Browser Server</div>
+                        <div class="text-blue-100 text-[10px]">iFlow SDK + MCP Browser</div>
                     </div>
                 </div>
                 <div class="flex items-center space-x-2">
@@ -187,10 +187,13 @@
 
     <!-- AI Chat WebSocket 连接脚本 -->
     <script>
-        // WebSocket 配置 - 连接到 iflow_browser_server
+        // WebSocket 配置
         const WS_URL = 'ws://localhost:8082/ws';
+        const HEALTH_URL = 'http://localhost:8082/health';
         let ws = null;
         let isConnected = false;
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 10;
 
         // DOM 元素
         const chatMessages = document.getElementById('chat-messages');
@@ -199,9 +202,65 @@
         const statusDot = document.getElementById('ws-status-dot');
         const statusText = document.getElementById('ws-status-text');
 
+        // 检查服务器健康状态
+        async function checkServerHealth() {
+            try {
+                const response = await fetch(HEALTH_URL, { method: 'GET' });
+                if (response.ok) {
+                    return { healthy: true, data: await response.json() };
+                }
+                return { healthy: false, status: response.status };
+            } catch (e) {
+                return { healthy: false, error: e.message };
+            }
+        }
+
+        // 显示服务依赖说明
+        function showServiceDependencyInfo() {
+            clearMessages();
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'space-y-2 text-xs';
+            msgDiv.innerHTML = `
+                <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">📋 启动服务依赖</div>
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                    <div class="flex items-start gap-2">
+                        <span class="text-amber-500">⚠️</span>
+                        <div class="text-slate-600">
+                            <div class="font-medium mb-1">需要启动以下服务：</div>
+                            <div class="font-mono text-[10px] space-y-1 ml-2">
+                                <div class="text-slate-500">1. iFlow ACP Server:</div>
+                                <div class="text-blue-600 bg-blue-50 px-2 py-1 rounded">iflow --experimental-acp --port 8090</div>
+                                <div class="text-slate-500 mt-2">2. Browser Server:</div>
+                                <div class="text-blue-600 bg-blue-50 px-2 py-1 rounded">uv run python src/server.py</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            chatMessages.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
         // 连接到 WebSocket 服务器
-        function connectWebSocket() {
+        async function connectWebSocket() {
+            // 先检查服务器健康状态
+            const health = await checkServerHealth();
+            
+            if (!health.healthy) {
+                showServiceDependencyInfo();
+                updateConnectionStatus(false, '服务器离线');
+                enableInput(false);
+                
+                reconnectAttempts++;
+                if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    const delay = Math.min(5000 * reconnectAttempts, 30000);
+                    setTimeout(connectWebSocket, delay);
+                }
+                return;
+            }
+
             console.log('尝试连接到:', WS_URL);
+            reconnectAttempts = 0;
 
             try {
                 ws = new WebSocket(WS_URL);
@@ -209,9 +268,10 @@
                 ws.onopen = () => {
                     console.log('WebSocket 连接成功');
                     isConnected = true;
-                    updateConnectionStatus(true);
+                    updateConnectionStatus(true, '已连接');
                     clearMessages();
-                    addSystemMessage('已连接到 iFlow Browser Server');
+                    addSystemMessage('✅ 已连接到 iFlow Browser Server');
+                    addSystemMessage(`📌 ACP: ${health.data?.iflow_url || 'ws://localhost:8090/acp'}`);
                     enableInput(true);
                 };
 
@@ -231,8 +291,8 @@
                 ws.onclose = (event) => {
                     console.log('WebSocket 连接关闭:', event.code, event.reason);
                     isConnected = false;
-                    updateConnectionStatus(false);
-                    addSystemMessage('与服务器断开连接');
+                    updateConnectionStatus(false, '连接断开');
+                    addSystemMessage('⚠️ 与服务器断开连接');
                     enableInput(false);
                     // 5秒后重连
                     setTimeout(connectWebSocket, 5000);
@@ -240,12 +300,14 @@
 
                 ws.onerror = (error) => {
                     console.error('WebSocket 错误:', error);
-                    addSystemMessage('连接错误，请检查服务器是否运行');
+                    updateConnectionStatus(false, '连接错误');
+                    addSystemMessage('❌ WebSocket 连接失败');
                 };
 
             } catch (error) {
                 console.error('连接失败:', error);
-                addSystemMessage('无法连接到服务器: ' + error.message);
+                updateConnectionStatus(false, '连接失败');
+                addSystemMessage('❌ 无法连接到服务器: ' + error.message);
                 // 5秒后重试
                 setTimeout(connectWebSocket, 5000);
             }
@@ -254,15 +316,40 @@
         // 处理收到的消息
         function handleMessage(data) {
             if (data.type === 'assistant' || data.type === 'stream' || data.type === 'message') {
-                addAIMessage(data.content || data.message || data.text || '');
+                // 优先使用 chunk 或 full_response
+                if (data.chunk || data.full_response) {
+                    updateLastAIMessage(data.full_response || data.chunk);
+                    // 同步到日志面板
+                    if (data.chunk) {
+                        addLog('info', `AI: ${data.chunk}`);
+                    }
+                } else {
+                    addAIMessage(data.content || data.message || data.text || '');
+                    addLog('info', `AI: ${data.content || data.message || data.text}`);
+                }
             } else if (data.type === 'tool_use') {
                 addToolMessage(data.tool, data.args);
+                // 同步到日志面板
+                addLog('command', `工具调用: ${data.tool}`);
+            } else if (data.type === 'plan') {
+                addPlanMessage(data.entries);
+                // 同步到日志面板
+                addLog('info', `生成执行计划: ${data.entries.length} 个步骤`);
+            } else if (data.type === 'task_finish') {
+                // 任务完成
+                console.log('任务完成:', data.stop_reason);
+                addLog('success', `任务完成: ${data.stop_reason}`);
+                // 自动完成当前测试步骤
+                completeCurrentStep();
             } else if (data.type === 'system') {
                 addSystemMessage(data.message || data.content || '');
+                addLog('info', `系统: ${data.message || data.content}`);
             } else if (data.type === 'error') {
                 addErrorMessage(data.error || data.message || '');
+                addLog('error', `错误: ${data.error || data.message}`);
             } else if (data.status === 'error') {
                 addErrorMessage(data.error);
+                addLog('error', `错误: ${data.error}`);
             } else if (data.chunk) {
                 // 流式响应片段
                 updateLastAIMessage(data.full_response || data.chunk);
@@ -345,6 +432,29 @@
             scrollToBottom();
         }
 
+        // 添加计划消息
+        function addPlanMessage(entries) {
+            if (!entries || entries.length === 0) return;
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'space-y-1';
+            let entriesHtml = entries.map(entry => {
+                const icon = entry.status === 'completed' ? '✅' : '⏳';
+                return `<div class="flex items-center gap-2 text-xs">
+                    <span>${icon}</span>
+                    <span class="${entry.status === 'completed' ? 'text-green-600' : 'text-slate-600'}">${escapeHtml(entry.content)}</span>
+                </div>`;
+            }).join('');
+
+            msgDiv.innerHTML = `
+                <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">📋 Plan</div>
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-2">
+                    ${entriesHtml}
+                </div>
+            `;
+            chatMessages.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
         // 添加错误消息
         function addErrorMessage(content) {
             if (!content) return;
@@ -366,15 +476,15 @@
         }
 
         // 更新连接状态
-        function updateConnectionStatus(connected) {
+        function updateConnectionStatus(connected, statusMsg = null) {
             if (connected) {
                 statusDot.className = 'w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse';
-                statusText.textContent = '已连接';
+                statusText.textContent = statusMsg || '已连接';
                 statusText.className = 'text-[10px] text-green-400 font-medium';
             } else {
-                statusDot.className = 'w-2.5 h-2.5 bg-slate-400 rounded-full';
-                statusText.textContent = '未连接';
-                statusText.className = 'text-[10px] text-slate-400 font-medium';
+                statusDot.className = 'w-2.5 h-2.5 bg-amber-400 rounded-full';
+                statusText.textContent = statusMsg || '未连接';
+                statusText.className = 'text-[10px] text-amber-300 font-medium';
             }
         }
 
@@ -425,6 +535,182 @@
         // 滚动到底部
         function scrollToBottom() {
             chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // ============================================================================
+        // 测试步骤状态管理
+        // ============================================================================
+
+        const testSteps = [
+            { id: 1, name: 'BIOS Config', status: 'active' },
+            { id: 2, name: 'BMC Event Log', status: 'waiting' },
+            { id: 3, name: 'OS Power Stress', status: 'waiting' },
+            { id: 4, name: 'Topology Verify', status: 'waiting' }
+        ];
+
+        let currentStepIndex = 0;
+
+        // 更新步骤状态显示
+        function updateStepDisplay() {
+            const stepsContainer = document.querySelector('.ml-4.border-l');
+            if (!stepsContainer) return;
+
+            stepsContainer.innerHTML = testSteps.map((step, index) => {
+                let statusClass = '';
+                let statusText = '';
+                let activeClass = '';
+
+                switch (step.status) {
+                    case 'active':
+                        statusClass = 'text-blue-600 font-bold bg-blue-50 border-r-2 border-blue-600';
+                        statusText = '<span class="text-[9px] opacity-50 ml-2">Active</span>';
+                        activeClass = 'cursor-pointer';
+                        break;
+                    case 'completed':
+                        statusClass = 'text-green-600 bg-green-50 border-r-2 border-green-600';
+                        statusText = '<span class="text-[9px] opacity-50 ml-2">✓ Done</span>';
+                        activeClass = 'cursor-pointer';
+                        break;
+                    case 'waiting':
+                    default:
+                        statusClass = 'text-slate-500 hover:bg-slate-50';
+                        statusText = '<span class="text-[9px] opacity-50 ml-2 italic">Waiting</span>';
+                        activeClass = 'cursor-pointer';
+                        break;
+                }
+
+                return `<div class="pl-4 py-1 ${statusClass} ${activeClass}" onclick="selectStep(${index})">
+                    ${(index + 1).toString().padStart(2, '0')}. ${step.name} ${statusText}
+                </div>`;
+            }).join('');
+        }
+
+        // 选择步骤
+        function selectStep(index) {
+            currentStepIndex = index;
+            // 更新当前步骤为 active，其他为 waiting 或 completed
+            testSteps.forEach((step, i) => {
+                if (i === index) {
+                    step.status = 'active';
+                } else if (i < index) {
+                    step.status = 'completed';
+                } else {
+                    step.status = 'waiting';
+                }
+            });
+            updateStepDisplay();
+            addLog('info', `切换到测试步骤: ${testSteps[index].name}`);
+        }
+
+        // 完成当前步骤
+        function completeCurrentStep() {
+            if (currentStepIndex < testSteps.length - 1) {
+                testSteps[currentStepIndex].status = 'completed';
+                currentStepIndex++;
+                testSteps[currentStepIndex].status = 'active';
+                updateStepDisplay();
+                addLog('success', `完成步骤: ${testSteps[currentStepIndex - 1].name}`);
+                addLog('info', `开始步骤: ${testSteps[currentStepIndex].name}`);
+            } else {
+                testSteps[currentStepIndex].status = 'completed';
+                updateStepDisplay();
+                addLog('success', `所有测试步骤已完成！`);
+            }
+        }
+
+        // ============================================================================
+        // 实时日志管理
+        // ============================================================================
+
+        const logPanel = document.querySelector('.text-slate-600.leading-loose');
+        if (logPanel) {
+            // 清空初始日志
+            logPanel.innerHTML = '';
+        }
+
+        // 添加日志
+        function addLog(type, message) {
+            const logPanel = document.querySelector('.text-slate-600.leading-loose');
+            if (!logPanel) return;
+
+            const time = new Date().toLocaleTimeString();
+            const logDiv = document.createElement('div');
+            logDiv.className = 'flex space-x-4';
+
+            let timeClass = 'text-blue-500';
+            let msgClass = 'text-slate-400';
+
+            switch (type) {
+                case 'info':
+                    timeClass = 'text-blue-500';
+                    msgClass = 'text-slate-400';
+                    break;
+                case 'success':
+                    timeClass = 'text-emerald-500';
+                    msgClass = 'text-emerald-600';
+                    break;
+                case 'warning':
+                    timeClass = 'text-yellow-500';
+                    msgClass = 'text-yellow-600';
+                    break;
+                case 'error':
+                    timeClass = 'text-red-500';
+                    msgClass = 'text-red-600';
+                    break;
+                case 'command':
+                    timeClass = 'text-indigo-500 font-bold';
+                    msgClass = 'text-indigo-600';
+                    break;
+                default:
+                    timeClass = 'text-blue-500';
+                    msgClass = 'text-slate-400';
+            }
+
+            logDiv.innerHTML = `
+                <span class="${timeClass}">[${time}]</span>
+                <span class="${msgClass}">${escapeHtml(message)}</span>
+            `;
+
+            logPanel.appendChild(logDiv);
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        // 初始化步骤显示
+        updateStepDisplay();
+
+        // ============================================================================
+        // 测试报告生成
+        // ============================================================================
+
+        function submitReport() {
+            const timestamp = new Date().toISOString();
+            const completedSteps = testSteps.filter(s => s.status === 'completed').length;
+            const totalSteps = testSteps.length;
+            const completionRate = Math.round((completedSteps / totalSteps) * 100);
+
+            const report = {
+                project: 'cTDP_Consistency_Test',
+                timestamp: timestamp,
+                device: 'Hygon 7002',
+                status: completionRate === 100 ? 'PASSED' : (completionRate > 0 ? 'IN_PROGRESS' : 'FAILED'),
+                completionRate: completionRate,
+                steps: testSteps,
+                logs: Array.from(document.querySelectorAll('.text-slate-600.leading-loose div')).map(div => div.textContent)
+            };
+
+            // 下载报告
+            const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `test_report_${new Date().getTime()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            addLog('success', `测试报告已生成: ${completionRate}% 完成`);
+            alert(`测试报告已生成！\n完成率: ${completionRate}%\n状态: ${report.status}`);
         }
 
         // 事件监听
