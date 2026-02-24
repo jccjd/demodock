@@ -1,9 +1,55 @@
-Traceback (most recent call last):
-  File "/home/f/demodock/iflow_browser_server.py", line 78, in <module>
-    class ACPConnectionManager:
-    ...<17 lines>...
-                await connection.send_text(message)
-  File "/home/f/demodock/iflow_browser_server.py", line 84, in ACPConnectionManager
-    async def connect(self, websocket: WebSocket):
-                                       ^^^^^^^^^
-NameError: name 'WebSocket' is not defined
+/home/f/demodock/iflow_browser_server.py:449: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+/home/f/demodock/iflow_browser_server.py:461: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("shutdown")
+INFO:     Started server process [836490]
+INFO:     Waiting for application startup.
+2026-02-10 20:59:37,758 - INFO - ======================================================================
+2026-02-10 20:59:37,758 - INFO - 🤖 iFlow 浏览器自动化服务启动
+2026-02-10 20:59:37,758 - INFO - ======================================================================
+2026-02-10 20:59:37,758 - INFO - 📌 iFlow URL: ws://localhost:8090/acp
+2026-02-10 20:59:37,758 - INFO - 📌 MCP URL: http://localhost:8080/mcp
+2026-02-10 20:59:37,758 - INFO - 📌 监听端口: 8082
+2026-02-10 20:59:37,758 - INFO - 📌 超时时间: 300.0秒
+2026-02-10 20:59:37,758 - INFO - ======================================================================
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8082 (Press CTRL+C to quit)
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2026-02-14 16:44:34,970 - INFO - 🛑 iFlow 浏览器自动化服务关闭...
+INFO:     Application shutdown complete.
+INFO:     Finished server process [836490]
+Terminated
+
+ERROR conda.cli.main_run:execute(127): `conda run python iflow_browser_server.py` failed. (See above for error)
+
+    ╔════════════════════════════════════════════════════════════════════╗
+    ║      🤖 iFlow 浏览器自动化服务                                        ║
+    ║      版本: 2.0.0                                                    ║
+    ║      架构: FastAPI → iFlow SDK → MCP 浏览器                          ║
+    ╚════════════════════════════════════════════════════════════════════╝
+    
+📌 配置:
+   - iFlow URL: ws://localhost:8090/acp
+   - MCP URL: http://localhost:8080/mcp
+   - 监听端口: 8082
+   - 超时时间: 300.0秒
+
+📚 API 文档: http://localhost:8082/docs
+
+🧪 测试方法:
+   1. 前端: 打开 ai_browser_chat.html
+   2. 命令行: curl -X POST http://localhost:8082/browser/stream-task -d '{"task":"打开百度"}'
+
+INFO:     127.0.0.1:46758 - "GET / HTTP/1.1" 200 OK
+
