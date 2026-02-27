@@ -83,7 +83,7 @@
             <div class="h-10 flex items-end px-2 pt-2 space-x-1 shrink-0">
                 <button id="tab-bios" onclick="switchTab('bios')" class="px-4 py-2 bg-white border border-b-0 border-slate-200 text-[11px] font-bold text-blue-600 rounded-t-lg shadow-sm flex items-center gap-2">
                     <span class="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-                    BIOS Console
+                    KVM VNC
                 </button>
                 <button id="tab-bmc" onclick="switchTab('bmc')" class="px-4 py-2 bg-slate-100 text-[11px] font-medium text-slate-500 hover:bg-white rounded-t-lg transition-colors flex items-center gap-2">
                     <span class="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
@@ -93,28 +93,52 @@
             <div class="flex-1 p-4 flex flex-col min-h-[40%]">
                 <div class="flex-1 bg-[#0f111a] rounded-xl overflow-hidden border border-slate-800 shadow-2xl relative flex items-center justify-center">
                     <!-- BIOS Panel -->
-                    <div id="bios-panel" class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-slate-900 to-slate-800">
-                        <div class="text-center space-y-4">
-                            <div class="w-16 h-16 mx-auto bg-slate-700 rounded-xl flex items-center justify-center shadow-lg">
-                                <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                                </svg>
+                    <div id="bios-panel" class="w-full h-full flex flex-col bg-gradient-to-b from-slate-900 to-slate-800 relative">
+                        <!-- VNC 头部信息栏 -->
+                        <div class="px-4 py-2 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between shrink-0">
+                            <div class="flex items-center gap-2">
+                                <div class="w-2 h-2 rounded-full" id="vnc-status-dot" style="background-color: #ef4444;"></div>
+                                <span class="text-white text-xs font-medium">KVM VNC</span>
+                                <span class="text-slate-400 text-[10px] mono" id="vnc-connection-info">localhost:6080 (websockify)</span>
                             </div>
-                            <div>
-                                <h3 class="text-white font-bold text-base mb-1">BIOS Console (Serial VNC)</h3>
-                                <p class="text-slate-400 text-xs">使用 VNC 客户端连接以下地址</p>
+                            <div class="flex items-center gap-1">
+                                <!-- 虚拟机控制按钮 -->
+                                <button onclick="vmControl('start')" class="text-slate-400 hover:text-green-400 text-[10px] px-2 py-1 rounded hover:bg-slate-700 transition-colors flex items-center gap-1" title="启动虚拟机">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    启动
+                                </button>
+                                <button onclick="vmControl('shutdown')" class="text-slate-400 hover:text-yellow-400 text-[10px] px-2 py-1 rounded hover:bg-slate-700 transition-colors flex items-center gap-1" title="关闭虚拟机">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
+                                    关闭
+                                </button>
+                                <button onclick="vmControl('reboot')" class="text-slate-400 hover:text-blue-400 text-[10px] px-2 py-1 rounded hover:bg-slate-700 transition-colors flex items-center gap-1" title="重启虚拟机">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                    重启
+                                </button>
+                                <button onclick="vmControl('stop')" class="text-slate-400 hover:text-red-400 text-[10px] px-2 py-1 rounded hover:bg-slate-700 transition-colors flex items-center gap-1" title="强制停止">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
+                                    强停
+                                </button>
+                                <div class="w-px h-4 bg-slate-600 mx-1"></div>
+                                <button onclick="reconnectVNC()" class="text-slate-400 hover:text-white text-[10px] px-2 py-1 rounded hover:bg-slate-700 transition-colors">
+                                    重连
+                                </button>
                             </div>
-                            <div class="bg-slate-800/80 rounded-lg px-4 py-3 border border-slate-600">
-                                <div class="text-slate-400 text-[10px] mb-1">VNC Address</div>
-                                <div class="flex items-center justify-center gap-2">
-                                    <code id="bios-vnc-addr" class="text-blue-400 text-sm font-mono font-bold">--:5900</code>
-                                    <button onclick="copyVncAddr()" class="p-1 hover:bg-slate-700 rounded transition-colors" title="Copy">
-                                        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                                        </svg>
-                                    </button>
+                        </div>
+                        <!-- VNC 图像显示区域 -->
+                        <div class="flex-1 relative flex items-center justify-center overflow-hidden bg-black">
+                            <!-- 连接中/错误提示 -->
+                            <div id="vnc-placeholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/50 p-8 z-10">
+                                <div class="w-12 h-12 mb-3 rounded-full bg-slate-700 flex items-center justify-center animate-pulse" id="vnc-icon-bg">
+                                    <svg class="w-6 h-6 text-blue-400" id="vnc-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                    </svg>
                                 </div>
+                                <div class="text-white text-sm font-medium mb-1" id="vnc-status-text">正在连接...</div>
+                                <div class="text-slate-400 text-xs text-center leading-relaxed max-w-md" id="vnc-status-detail">等待 VNC 图像流</div>
                             </div>
+                            <!-- noVNC iframe -->
+                            <iframe id="vnc-iframe" class="hidden w-full h-full border-0" allow="fullscreen"></iframe>
                         </div>
                     </div>
                     <!-- BMC iframe -->
@@ -183,7 +207,10 @@
         const AppConfig = {
             WS_URL: `ws://${HOST}:8082/ws`,
             HEALTH_URL: `http://${HOST}:8082/health`,
-            VNC_BMC_URL: `http://${HOST}:3000/vnc/index.html?autoconnect=true`,
+            VNC_BMC_URL: `http://10.8.135.251:3000/vnc/index.html?autoconnect=true`,
+            VNC_WS_URL: `ws://${HOST}:8082/vnc`,
+            VNC_WEBSOCKIFY_URL: `ws://${HOST}:6080/websockify`,  // websockify WebSocket 地址（本地）
+            VNC_NOVNC_URL: `novnc/vnc_lite.html?host=${HOST}&port=6080&path=websockify`,  // noVNC 页面（带参数）
             BIOS_VNC_ADDR: `${HOST}:5900`
         };
 
@@ -229,12 +256,21 @@
         // WebSocket 相关变量
         let ws = null;
         let isConnected = false;
+        let vncWs = null;
+        let vncConnected = false;
 
         // DOM 元素引用
         const chatMessages = document.getElementById('chat-messages');
         const chatInput = document.getElementById('chat-input');
         const sendBtn = document.getElementById('send-btn');
         const terminalOutput = document.getElementById('terminal-output');
+        const vncIframe = document.getElementById('vnc-iframe');
+        const vncPlaceholder = document.getElementById('vnc-placeholder');
+        const vncStatusDot = document.getElementById('vnc-status-dot');
+        const vncStatusText = document.getElementById('vnc-status-text');
+        const vncStatusDetail = document.getElementById('vnc-status-detail');
+        const vncIconBg = document.getElementById('vnc-icon-bg');
+        const vncIcon = document.getElementById('vnc-icon');
 
         // ==========================================
         // Tab 切换
@@ -244,7 +280,7 @@
             const tabBmc = document.getElementById('tab-bmc');
             const biosPanel = document.getElementById('bios-panel');
             const bmcFrame = document.getElementById('bmc-frame');
-            
+
             const activeCls = "px-4 py-2 bg-white border border-b-0 border-slate-200 text-[11px] font-bold text-blue-600 rounded-t-lg shadow-sm flex items-center gap-2";
             const inactiveCls = "px-4 py-2 bg-slate-100 text-[11px] font-medium text-slate-500 hover:bg-white rounded-t-lg transition-colors flex items-center gap-2";
 
@@ -254,6 +290,10 @@
                 biosPanel.classList.remove('hidden');
                 bmcFrame.classList.add('hidden');
                 addLog('info', 'Switched to BIOS Console');
+                // 连接 VNC
+                if (!vncConnected) {
+                    connectVNC();
+                }
             } else {
                 tabBmc.className = activeCls;
                 tabBios.className = inactiveCls;
@@ -435,7 +475,7 @@
         function updateStatus(state) {
             const dot = document.getElementById('ws-dot');
             const text = document.getElementById('ws-text');
-            
+
             if (state === 'connected') {
                 dot.className = 'w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_#22c55e]';
                 text.textContent = 'Connected';
@@ -447,6 +487,137 @@
                 dot.className = 'w-2 h-2 bg-red-500 rounded-full';
                 text.textContent = 'Offline';
                 chatInput.disabled = sendBtn.disabled = true;
+            }
+        }
+
+// VNC 连接和图像处理
+
+function connectVNC() {
+            if (vncConnected) {
+                return;
+            }
+
+            updateVNCStatus('connecting', '正在连接...', '正在加载 noVNC 并连接 websockify');
+            addLog('info', `Loading noVNC: ${AppConfig.VNC_NOVNC_URL}`);
+
+            try {
+                // 使用 noVNC iframe，它会自动连接到 websockify
+                vncIframe.src = AppConfig.VNC_NOVNC_URL;
+                vncIframe.classList.remove('hidden');
+                vncPlaceholder.classList.add('hidden');
+
+                // 监听 iframe 加载完成
+                vncIframe.onload = () => {
+                    vncConnected = true;
+                    updateVNCStatus('connected', '已连接', 'noVNC 已加载，连接到 websockify');
+                    addLog('success', 'VNC connected via noVNC + websockify');
+                };
+
+                // 监听 iframe 错误
+                vncIframe.onerror = () => {
+                    updateVNCStatus('error', '连接失败', 'noVNC 加载失败');
+                    addLog('error', 'VNC iframe load failed');
+                };
+
+            } catch (err) {
+                updateVNCStatus('error', '连接失败', err.message);
+                addLog('error', 'VNC connection failed: ' + err.message);
+            }
+        }
+
+        function updateVNCStatus(status, text, detail) {
+            vncStatusText.textContent = text;
+
+            // 处理多行错误信息
+            if (detail && detail.includes('\n')) {
+                // 将换行符转换为 HTML 换行
+                vncStatusDetail.innerHTML = detail.replace(/\n/g, '<br>');
+            } else {
+                vncStatusDetail.textContent = detail || '';
+            }
+
+            // 重置动画
+            vncIconBg.classList.remove('animate-pulse');
+
+            switch (status) {
+                case 'connected':
+                    vncStatusDot.style.backgroundColor = '#22c55e';
+                    vncStatusDot.classList.add('animate-pulse');
+                    vncIconBg.style.backgroundColor = '#16a34a';
+                    vncIcon.style.color = '#ffffff';
+                    break;
+                case 'connecting':
+                    vncStatusDot.style.backgroundColor = '#eab308';
+                    vncStatusDot.classList.add('animate-pulse');
+                    vncIconBg.style.backgroundColor = '#eab308';
+                    vncIcon.style.color = '#ffffff';
+                    vncIconBg.classList.add('animate-pulse');
+                    break;
+                case 'disconnected':
+                    vncStatusDot.style.backgroundColor = '#64748b';
+                    vncStatusDot.classList.remove('animate-pulse');
+                    vncIconBg.style.backgroundColor = '#64748b';
+                    vncIcon.style.color = '#ffffff';
+                    break;
+                case 'error':
+                    vncStatusDot.style.backgroundColor = '#ef4444';
+                    vncStatusDot.classList.remove('animate-pulse');
+                    vncIconBg.style.backgroundColor = '#ef4444';
+                    vncIcon.style.color = '#ffffff';
+                    // 显示占位符，隐藏 iframe
+                    vncIframe.classList.add('hidden');
+                    vncPlaceholder.classList.remove('hidden');
+                    break;
+                default:
+                    vncStatusDot.style.backgroundColor = '#ef4444';
+                    vncStatusDot.classList.remove('animate-pulse');
+                    vncIconBg.style.backgroundColor = '#ef4444';
+                    vncIcon.style.color = '#ffffff';
+            }
+        }
+
+function reconnectVNC() {
+            vncConnected = false;
+            vncIframe.src = '';
+            vncIframe.classList.add('hidden');
+            vncPlaceholder.classList.remove('hidden');
+            connectVNC();
+        }
+
+        // ==========================================
+        // 虚拟机控制
+        // ==========================================
+        async function vmControl(action) {
+            const vmName = prompt('请输入虚拟机名称:', 'test-vm');
+            if (!vmName) return;
+
+            addLog('info', `正在${action}虚拟机: ${vmName}`);
+
+            try {
+                const response = await fetch(`http://${HOST}:8082/vm/control`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: action,
+                        vm_name: vmName
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    addLog('success', result.output);
+                    if (result.state) {
+                        addLog('info', `虚拟机状态: ${result.state}`);
+                    }
+                } else {
+                    addLog('error', result.output || '操作失败');
+                }
+
+            } catch (error) {
+                addLog('error', `虚拟机控制失败: ${error.message}`);
             }
         }
 
@@ -632,37 +803,25 @@
         }
 
         // ==========================================
-        // VNC 地址复制
-        // ==========================================
-        function copyVncAddr() {
-            navigator.clipboard.writeText(AppConfig.BIOS_VNC_ADDR).then(() => {
-                addLog('success', `Copied: ${AppConfig.BIOS_VNC_ADDR}`);
-            });
-        }
-
-        // ==========================================
         // 初始化
         // ==========================================
         document.addEventListener('DOMContentLoaded', () => {
-            // 设置 VNC 地址显示
-            document.getElementById('bios-vnc-addr').textContent = AppConfig.BIOS_VNC_ADDR;
-            
             // 渲染测试步骤
             renderTestSteps();
-            
+
             // 设置默认 Tab
             switchTab('bios');
-            
+
             // 连接 WebSocket
             setTimeout(connectWebSocket, 500);
-        });
 
-        // 快捷键
-        chatInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && e.ctrlKey) {
-                e.preventDefault();
-                sendMessage();
-            }
+            // 快捷键监听
+            chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
         });
     </script>
 </body>

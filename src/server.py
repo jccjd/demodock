@@ -13,14 +13,34 @@ import sys
 import json
 import asyncio
 import logging
+import base64
 from typing import AsyncGenerator, Optional, List
 from datetime import datetime
+from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
+
+# VNC 相关导入
+try:
+    from vncdotool import api
+    from PIL import Image
+    VNC_AVAILABLE = True
+except ImportError:
+    VNC_AVAILABLE = False
+    print("⚠️  警告: vncdotool 或 PIL 未安装，VNC 功能将不可用")
+
+# SSH 相关导入
+try:
+    import paramiko
+    SSH_AVAILABLE = True
+except ImportError:
+    SSH_AVAILABLE = False
+    print("⚠️  警告: paramiko 未安装，虚拟机控制功能将不可用")
 
 # 导入 iFlow SDK
 try:
@@ -40,8 +60,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 环境变量
-IFLOW_URL = os.getenv("IFLOW_URL", "ws://localhost:8090/acp")
-MCP_HTTP_URL = os.getenv("MCP_HTTP_URL", "http://localhost:8080/mcp")
+IFLOW_URL = os.getenv("IFLOW_URL", "ws://10.8.135.251:8090/acp")
+MCP_HTTP_URL = os.getenv("MCP_HTTP_URL", "http://10.8.135.251:8080/mcp")
 PORT = int(os.getenv("PORT", "8082"))
 TIMEOUT = float(os.getenv("TIMEOUT", "300.0"))
 
@@ -70,6 +90,26 @@ class BrowserTask(BaseModel):
     task: str
     timeout: Optional[float] = TIMEOUT
 
+class VNCConfig(BaseModel):
+    """VNC 连接配置"""
+    host: str = "10.8.136.182"
+    port: int = 5900
+    username: str = "admin"
+    password: str = "admin"
+
+class VMConfig(BaseModel):
+    """虚拟机配置"""
+    host: str = "10.8.136.182"
+    ssh_port: int = 22
+    username: str = "root"
+    password: str = ""
+    vm_name: str = "test-vm"  # 虚拟机名称
+
+class VMControlRequest(BaseModel):
+    """虚拟机控制请求"""
+    action: str  # start, stop, reboot, shutdown, status
+    vm_name: Optional[str] = None
+
 # ============================================================================
 # ACP WebSocket 管理
 # ============================================================================
@@ -97,6 +137,270 @@ class ACPConnectionManager:
 # 创建连接管理器实例
 manager = ACPConnectionManager()
 
+# 创建线程池用于同步 VNC 操作
+vnc_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="vnc_")
+
+# VNC 客户端缓存
+vnc_client_cache = None
+vnc_client_lock = asyncio.Lock()
+
+# ============================================================================
+# 虚拟机控制（通过 SSH + virsh）
+# ============================================================================
+
+def _execute_virsh_command_sync(ssh_host: str, ssh_port: int, ssh_user: str, ssh_password: str, vm_name: str, action: str):
+    """
+    同步函数：通过 SSH 执行 virsh 命令控制虚拟机
+    """
+    if not SSH_AVAILABLE:
+        raise RuntimeError("paramiko 未安装")
+
+    try:
+        # 创建 SSH 客户端
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        # 连接到服务器
+        ssh.connect(
+            hostname=ssh_host,
+            port=ssh_port,
+            username=ssh_user,
+            password=ssh_password,
+            timeout=10
+        )
+
+        # 根据动作执行不同的 virsh 命令
+        commands = {
+            'start': f'virsh start {vm_name}',
+            'stop': f'virsh destroy {vm_name}',
+            'reboot': f'virsh reboot {vm_name}',
+            'shutdown': f'virsh shutdown {vm_name}',
+            'status': f'virsh domstate {vm_name}'
+        }
+
+        if action not in commands:
+            raise ValueError(f"不支持的操作: {action}")
+
+        command = commands[action]
+        logger.info(f"执行 virsh 命令: {command}")
+
+        # 执行命令
+        stdin, stdout, stderr = ssh.exec_command(command)
+        output = stdout.read().decode('utf-8').strip()
+        error = stderr.read().decode('utf-8').strip()
+
+        # 关闭连接
+        ssh.close()
+
+        if error and action != 'status':
+            logger.warning(f"virsh 命令警告: {error}")
+
+        result = {
+            'action': action,
+            'vm_name': vm_name,
+            'output': output,
+            'success': True
+        }
+
+        # 解析状态
+        if action == 'status':
+            result['state'] = output
+            result['output'] = f"虚拟机 {vm_name} 状态: {output}"
+        else:
+            result['output'] = f"虚拟机 {vm_name} {action} 成功"
+
+        return result
+
+    except paramiko.AuthenticationException:
+        raise Exception("SSH 认证失败，请检查用户名和密码")
+    except paramiko.SSHException as e:
+        raise Exception(f"SSH 连接失败: {str(e)}")
+    except Exception as e:
+        logger.error(f"执行 virsh 命令失败: {e}")
+        raise
+
+# ============================================================================
+# VNC 图像生成器（真实 VNC 图像流）
+# ============================================================================
+
+def _capture_vnc_screen_sync(host: str, port: int, username: str, password: str):
+    """
+    同步函数：捕获 VNC 屏幕
+
+    注意：vncdotool 的 API 是同步的，需要在线程池中运行
+    """
+    if not VNC_AVAILABLE:
+        raise RuntimeError("vncdotool 或 PIL 未安装")
+
+    try:
+        # 连接到 VNC 服务器
+        client = api.connect(
+            f"{host}:{port}",
+            password=password
+        )
+
+        # 捕获屏幕
+        screen = client.captureScreen()
+
+        # 转换为 PIL Image
+        img = Image.frombytes('RGB', screen.size, screen.data)
+
+        # 调整图像大小以优化传输（最大宽度 800px）
+        if img.width > 800:
+            ratio = 800 / img.width
+            new_height = int(img.height * ratio)
+            img = img.resize((800, new_height), Image.Resampling.LANCZOS)
+
+        # 转换为 JPEG 格式并编码为 base64
+        buffered = BytesIO()
+        img.save(buffered, format='JPEG', quality=85)
+        img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+        return img_base64
+
+    except Exception as e:
+        logger.error(f"VNC 屏幕捕获失败: {e}")
+        raise
+
+async def get_vnc_client(vnc_config: VNCConfig):
+    """
+    获取或创建 VNC 客户端（使用缓存）
+    """
+    global vnc_client_cache
+
+    async with vnc_client_lock:
+        if vnc_client_cache is None:
+            # 在线程池中创建 VNC 客户端
+            loop = asyncio.get_event_loop()
+            try:
+                vnc_client_cache = await loop.run_in_executor(
+                    vnc_executor,
+                    lambda: api.connect(
+                        f"{vnc_config.host}:{vnc_config.port}",
+                        password=vnc_config.password
+                    )
+                )
+                logger.info(f"✅ VNC 客户端已创建: {vnc_config.host}:{vnc_config.port}")
+            except Exception as e:
+                logger.error(f"❌ VNC 客户端创建失败: {e}")
+                vnc_client_cache = None
+                raise
+
+        return vnc_client_cache
+
+async def generate_vnc_image_stream(vnc_config: VNCConfig) -> AsyncGenerator[dict, None]:
+    """
+    生成真实的 VNC 图像流
+
+    Args:
+        vnc_config: VNC 连接配置
+
+    Yields:
+        图像数据字典，包含：
+        - image: base64 编码的 JPEG 图像数据
+        - timestamp: 时间戳
+        - status: 状态信息
+        - width: 图像宽度
+        - height: 图像高度
+    """
+    if not VNC_AVAILABLE:
+        yield {
+            'status': 'error',
+            'error': 'vncdotool 或 PIL 未安装，请先安装: pip install vncdotool pillow',
+            'timestamp': datetime.now().isoformat()
+        }
+        return
+
+    try:
+        logger.info(f"🖥️  开始 VNC 图像流: {vnc_config.host}:{vnc_config.port}")
+
+        # 在线程池中执行同步的 VNC 操作
+        loop = asyncio.get_event_loop()
+        retry_count = 0
+        max_retries = 3
+
+        while True:
+            try:
+                # 在线程池中捕获屏幕（设置超时）
+                try:
+                    img_base64 = await asyncio.wait_for(
+                        loop.run_in_executor(
+                            vnc_executor,
+                            lambda: _capture_vnc_screen_sync(
+                                vnc_config.host,
+                                vnc_config.port,
+                                vnc_config.username,
+                                vnc_config.password
+                            )
+                        ),
+                        timeout=10.0  # 10秒超时
+                    )
+
+                    # 重置重试计数
+                    retry_count = 0
+
+                    # 发送图像数据
+                    yield {
+                        'image': img_base64,
+                        'timestamp': datetime.now().isoformat(),
+                        'status': 'connected',
+                        'host': vnc_config.host,
+                        'port': vnc_config.port
+                    }
+
+                except asyncio.TimeoutError:
+                    retry_count += 1
+                    logger.warning(f"⚠️  VNC 捕获超时 (重试 {retry_count}/{max_retries})")
+
+                    if retry_count >= max_retries:
+                        error_msg = f"VNC 连接超时，已重试 {max_retries} 次。请检查："
+                        error_msg += f"\n1. VNC 服务器 {vnc_config.host}:{vnc_config.port} 是否运行"
+                        error_msg += f"\n2. 网络连接是否正常"
+                        error_msg += f"\n3. 防火墙是否允许连接"
+                        error_msg += f"\n4. 用户名密码是否正确 ({vnc_config.username}/{vnc_config.password})"
+
+                        yield {
+                            'status': 'error',
+                            'error': error_msg,
+                            'timestamp': datetime.now().isoformat()
+                        }
+                        # 等待更长时间后继续尝试
+                        await asyncio.sleep(5)
+                        retry_count = 0
+                    else:
+                        # 短暂等待后重试
+                        await asyncio.sleep(2)
+
+                # 控制帧率（约 10fps，避免过高负载）
+                await asyncio.sleep(0.1)
+
+            except ConnectionRefusedError as e:
+                logger.error(f"❌ VNC 连接被拒绝: {e}")
+                yield {
+                    'status': 'error',
+                    'error': f'VNC 连接被拒绝。请检查 VNC 服务器 {vnc_config.host}:{vnc_config.port} 是否正在运行。',
+                    'timestamp': datetime.now().isoformat()
+                }
+                await asyncio.sleep(5)
+
+            except Exception as e:
+                logger.error(f"❌ VNC 图像捕获失败: {e}")
+                yield {
+                    'status': 'error',
+                    'error': str(e),
+                    'timestamp': datetime.now().isoformat()
+                }
+                # 等待一段时间后重试
+                await asyncio.sleep(2)
+
+    except Exception as e:
+        logger.error(f"❌ VNC 图像流生成失败: {e}")
+        yield {
+            'status': 'error',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }
+
 # ============================================================================
 # iFlow 客户端管理
 # ============================================================================
@@ -110,9 +414,11 @@ async def create_iflow_client() -> IFlowClient:
         timeout=TIMEOUT,
         log_level="INFO",
 
-        # 文件系统访问
-        file_access=True,
-        file_allowed_dirs=["/Users/zz/Desktop/codes/demodock"],
+        # 文件系统访问 - 禁用以避免路径问题
+        file_access=False,
+
+        # 工作目录 - 使用相对路径避免 Windows 路径问题
+        cwd=".",
 
         # MCP 服务器配置 - HTTP 方式
         mcp_servers=[
@@ -220,6 +526,168 @@ async def execute_stream_task(task: str) -> AsyncGenerator[dict, None]:
 # ============================================================================
 # API 端点
 # ============================================================================
+
+@app.post("/vm/control")
+async def vm_control(request: VMControlRequest):
+    """
+    虚拟机控制 API
+
+    支持的操作:
+    - start: 启动虚拟机
+    - stop: 强制停止虚拟机
+    - reboot: 重启虚拟机
+    - shutdown: 优雅关闭虚拟机
+    - status: 查询虚拟机状态
+
+    请求格式:
+    {
+        "action": "start",
+        "vm_name": "test-vm"
+    }
+
+    响应格式:
+    {
+        "action": "start",
+        "vm_name": "test-vm",
+        "output": "虚拟机 test-vm start 成功",
+        "success": true,
+        "state": "running"  # 仅 status 操作返回
+    }
+    """
+    try:
+        # 从环境变量或使用默认配置
+        vm_config = VMConfig(
+            host=os.getenv("VM_HOST", "10.8.136.182"),
+            ssh_port=int(os.getenv("VM_SSH_PORT", "22")),
+            username=os.getenv("VM_SSH_USER", "root"),
+            password=os.getenv("VM_SSH_PASSWORD", ""),
+            vm_name=request.vm_name or os.getenv("VM_NAME", "test-vm")
+        )
+
+        logger.info(f"🎮 虚拟机控制请求: {request.action} - {vm_config.vm_name}")
+
+        # 在线程池中执行同步的 SSH 操作
+        loop = asyncio.get_event_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                vnc_executor,
+                lambda: _execute_virsh_command_sync(
+                    vm_config.host,
+                    vm_config.ssh_port,
+                    vm_config.username,
+                    vm_config.password,
+                    vm_config.vm_name,
+                    request.action
+                )
+            ),
+            timeout=30.0
+        )
+
+        logger.info(f"✅ 虚拟机控制成功: {result['output']}")
+        return result
+
+    except asyncio.TimeoutError:
+        logger.error(f"❌ 虚拟机控制超时")
+        raise HTTPException(status_code=408, detail="操作超时，请检查网络连接")
+
+    except Exception as e:
+        logger.error(f"❌ 虚拟机控制失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/vm/status/{vm_name}")
+async def get_vm_status(vm_name: str):
+    """
+    获取虚拟机状态
+
+    响应格式:
+    {
+        "vm_name": "test-vm",
+        "state": "running",
+        "success": true
+    }
+    """
+    try:
+        vm_config = VMConfig(
+            host=os.getenv("VM_HOST", "10.8.136.182"),
+            ssh_port=int(os.getenv("VM_SSH_PORT", "22")),
+            username=os.getenv("VM_SSH_USER", "root"),
+            password=os.getenv("VM_SSH_PASSWORD", ""),
+            vm_name=vm_name
+        )
+
+        loop = asyncio.get_event_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                vnc_executor,
+                lambda: _execute_virsh_command_sync(
+                    vm_config.host,
+                    vm_config.ssh_port,
+                    vm_config.username,
+                    vm_config.password,
+                    vm_config.vm_name,
+                    'status'
+                )
+            ),
+            timeout=10.0
+        )
+
+        return {
+            "vm_name": vm_name,
+            "state": result.get('state', 'unknown'),
+            "success": True
+        }
+
+    except Exception as e:
+        logger.error(f"❌ 获取虚拟机状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.websocket("/vnc")
+async def vnc_websocket(websocket: WebSocket):
+    """
+    VNC 图像流 WebSocket 端点
+
+    连接后持续发送 VNC 图像帧（base64 编码）
+
+    客户端连接示例：
+    const ws = new WebSocket('ws://localhost:8082/vnc');
+    ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.image) {
+            // 显示图像
+            const img = document.getElementById('vnc-display');
+            img.src = 'data:image/jpeg;base64,' + data.image;
+        }
+    };
+    """
+    await websocket.accept()
+    vnc_config = VNCConfig()  # 使用默认配置
+
+    try:
+        logger.info(f"🖥️  VNC WebSocket 客户端连接: {vnc_config.host}:{vnc_config.port}")
+
+        # 发送连接确认
+        await websocket.send_text(json.dumps({
+            'type': 'connected',
+            'host': vnc_config.host,
+            'port': vnc_config.port,
+            'message': f'已连接到 VNC 服务器 {vnc_config.host}:{vnc_config.port}'
+        }, ensure_ascii=False))
+
+        # 生成并发送图像流
+        async for image_data in generate_vnc_image_stream(vnc_config):
+            await websocket.send_text(json.dumps(image_data, ensure_ascii=False))
+
+    except WebSocketDisconnect:
+        logger.info("VNC WebSocket 连接断开")
+    except Exception as e:
+        logger.error(f"VNC WebSocket 错误: {e}")
+        try:
+            await websocket.send_text(json.dumps({
+                'type': 'error',
+                'error': str(e)
+            }, ensure_ascii=False))
+        except:
+            pass
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -398,10 +866,16 @@ async def root():
             "url": MCP_HTTP_URL,
             "type": "http"
         },
+        "vnc": {
+            "default_host": "10.8.136.182",
+            "default_port": 5900,
+            "default_user": "admin"
+        },
         "endpoints": {
             "GET /": "服务信息",
             "GET /health": "健康检查",
-            "POST /browser/stream-task": "流式执行浏览器任务"
+            "POST /browser/stream-task": "流式执行浏览器任务",
+            "WS /vnc": "VNC 图像流 WebSocket"
         }
     }
 

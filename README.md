@@ -95,4 +95,41 @@ demodock/
 
 ## 许可证
 
-MIT
+
+```
+D:\apps\qemu\qemu-system-x86_64.exe -m 2G -smp 2 -cdrom D:\TinyCore-current.iso -boot menu=on,strict=on
+  -vnc 127.0.0.1:1 -net nic -net user -accel whpx -display none
+  
+键盘有反应了
+ D:\apps\qemu\qemu-system-x86_64.exe -m 2G -smp 2 -cdrom D:\TinyCore-current.iso -net nic -net user -
+   display sdl
+D:\apps\qemu\qemu-system-x86_64.exe -m 2G -smp 2 -cdrom D:\TinyCore-current.iso -net nic -net user -display sdl -vnc 127.0.0.1:1
+
+   D:\apps\qemu\qemu-system-x86_64.exe -m 2G -smp 2 -drive if=pflash,format=raw,readonly=on,file
+   =D:\apps\qemu\share\edk2-x86_64-code.fd -cdrom D:\TinyCore-current.iso -net nic -net user -display sdl
+   -vnc 127.0.0.1:1
+```
+
+✦ 是的！安装后会安装到我们创建的虚拟磁盘 uefi_disk.qcow2 中，并且可以通过 UEFI 启动。
+  安装位置：
+   - 虚拟磁盘：D:\apps\qemu\uefi_disk.qcow2（20GB）
+   - Ubuntu 会自动安装 UEFI 启动引导程序到虚拟磁盘
+
+  安装完成后如何通过 UEFI 启动：
+
+  安装完成后，Ubuntu 会在 UEFI 启动管理器中注册启动项。下次启动时：
+
+   1. 重启虚拟机
+   2. 在 UEFI 启动菜单中，您会看到：
+      - ubuntu - 新安装的 Ubuntu 系统（从硬盘启动）
+      - EFI Internal Shell - UEFI Shell
+      - EFI DVD/CDROM - CD-ROM（如果还在）
+
+   3. 选择 `ubuntu` 并按 Enter，就会从虚拟磁盘启动 Ubuntu
+
+  当前配置说明：
+   -drive file=uefi_disk.qcow2,format=qcow2,if=ide,index=0    # 虚拟硬盘（index=0，第一硬盘）
+   -drive file=D:\ubuntu-22.04-live-server-amd64.iso,media=cdrom,if=ide,index=1  #
+   安装光盘（index=1，第二光驱）
+
+  安装完成后，Ubuntu 会配置 UEFI 启动，您可以从硬盘启动了。

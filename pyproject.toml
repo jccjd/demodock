@@ -10,4 +10,8 @@ dependencies = [
     "pydantic>=2.12.5",
     "uvicorn>=0.40.0",
     "websockets>=16.0",
+    "vncdotool>=1.2.0",
+    "pillow>=10.0.0",
+    "paramiko>=3.0.0",
+    "websockify>=0.12.0",
 ]
