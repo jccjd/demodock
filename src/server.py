@@ -60,8 +60,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 环境变量
-IFLOW_URL = os.getenv("IFLOW_URL", "ws://10.8.135.251:8090/acp")
-MCP_HTTP_URL = os.getenv("MCP_HTTP_URL", "http://10.8.135.251:8080/mcp")
+IFLOW_URL = os.getenv("IFLOW_URL", "ws://127.0.0.1:8090/acp")
+MCP_HTTP_URL = os.getenv("MCP_HTTP_URL", "http://127.0.0.1:8080/mcp")
 PORT = int(os.getenv("PORT", "8082"))
 TIMEOUT = float(os.getenv("TIMEOUT", "300.0"))
 
@@ -92,14 +92,14 @@ class BrowserTask(BaseModel):
 
 class VNCConfig(BaseModel):
     """VNC 连接配置"""
-    host: str = "10.8.136.182"
-    port: int = 5900
-    username: str = "admin"
-    password: str = "admin"
+    host: str = "127.0.0.1"
+    port: int = 5901
+    username: str = ""
+    password: str = ""
 
 class VMConfig(BaseModel):
     """虚拟机配置"""
-    host: str = "10.8.136.182"
+    host: str = "127.0.0.1"
     ssh_port: int = 22
     username: str = "root"
     password: str = ""
@@ -557,7 +557,7 @@ async def vm_control(request: VMControlRequest):
     try:
         # 从环境变量或使用默认配置
         vm_config = VMConfig(
-            host=os.getenv("VM_HOST", "10.8.136.182"),
+            host=os.getenv("VM_HOST", "127.0.0.1"),
             ssh_port=int(os.getenv("VM_SSH_PORT", "22")),
             username=os.getenv("VM_SSH_USER", "root"),
             password=os.getenv("VM_SSH_PASSWORD", ""),
@@ -608,7 +608,7 @@ async def get_vm_status(vm_name: str):
     """
     try:
         vm_config = VMConfig(
-            host=os.getenv("VM_HOST", "10.8.136.182"),
+            host=os.getenv("VM_HOST", "127.0.0.1"),
             ssh_port=int(os.getenv("VM_SSH_PORT", "22")),
             username=os.getenv("VM_SSH_USER", "root"),
             password=os.getenv("VM_SSH_PASSWORD", ""),
@@ -711,32 +711,77 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 接收响应流
                 full_response = ""
                 async for message in client.receive_messages():
-                    logger.debug(f"收到消息: {message}")
+                    msg_type = getattr(message, 'type', 'unknown')
+                    logger.info(f"📨 收到消息 type={msg_type}: {str(message)[:200]}...")
+                    logger.debug(f"完整消息对象: {message}")
 
                     # 处理不同类型的消息
                     if hasattr(message, 'type'):
                         if message.type == 'assistant':
-                            # AI 响应消息
+                            # AI 响应消息 - 可能是文本或思考内容
                             chunk = ""
+                            thought = None
+                            
                             if hasattr(message, 'chunk') and message.chunk:
+                                # 获取文本内容
                                 chunk = message.chunk.text or ""
-                                full_response += chunk
-                                # 发送流式响应
-                                await websocket.send_text(json.dumps({
-                                    'type': 'assistant',
-                                    'chunk': chunk,
-                                    'full_response': full_response,
-                                    'status': 'streaming'
-                                }, ensure_ascii=False))
+                                # 获取思考内容（通过 agent_thought_chunk 发送时会有值）
+                                thought = getattr(message.chunk, 'thought', None)
+                                
+                                # 调试日志：显示 chunk 的具体内容
+                                logger.debug(f"📝 AssistantMessageChunk: text={bool(chunk)}, thought={bool(thought)}")
+                                
+                                # 只有文本内容才累加到 full_response
+                                if chunk:
+                                    full_response += chunk
+                            
+                            # 判断消息类型：是思考内容还是文本内容
+                            is_thought_message = thought is not None and not chunk
+                            
+                            # 构建响应数据
+                            response_data = {
+                                'type': 'assistant',
+                                'chunk': chunk,
+                                'full_response': full_response,
+                                'status': 'streaming'
+                            }
+                            
+                            # 如果有思考内容，添加到响应中
+                            if thought:
+                                response_data['thought'] = thought
+                                logger.info(f"💭 思考内容: {thought[:100]}...")
+                            
+                            # 如果是纯思考消息，使用单独的类型标识
+                            if is_thought_message:
+                                response_data['subtype'] = 'thought'
+                                logger.info(f"🧠 发送思考消息: thought长度={len(thought)}")
+                            
+                            # 发送响应
+                            logger.info(f"📤 发送流式响应: chunk='{chunk[:50] if chunk else '(empty)'}...' thought={bool(thought)} full_response长度={len(full_response)}")
+                            await websocket.send_text(json.dumps(response_data, ensure_ascii=False))
 
                         elif message.type == 'tool_call':
                             # 工具调用消息
+                            tool_name = message.tool_name if hasattr(message, 'tool_name') else (message.label if hasattr(message, 'label') else 'unknown')
+                            tool_status = message.status if hasattr(message, 'status') else 'pending'
+                            tool_args = {}
+                            
+                            # 尝试获取参数
+                            if hasattr(message, 'arguments'):
+                                tool_args = message.arguments if isinstance(message.arguments, dict) else {}
+                            elif hasattr(message, 'args'):
+                                tool_args = message.args if isinstance(message.args, dict) else {}
+                            elif hasattr(message, 'input'):
+                                tool_args = message.input if isinstance(message.input, dict) else {}
+                            
                             await websocket.send_text(json.dumps({
                                 'type': 'tool_use',
-                                'tool': message.tool_name if hasattr(message, 'tool_name') else message.label,
-                                'status': message.status,
-                                'args': getattr(message, 'arguments', {})
+                                'tool': tool_name,
+                                'status': tool_status,
+                                'args': tool_args
                             }, ensure_ascii=False))
+                            
+                            logger.info(f"🔧 工具调用: {tool_name}, status: {tool_status}, args: {tool_args}")
 
                         elif message.type == 'plan':
                             # 计划消息
@@ -867,8 +912,8 @@ async def root():
             "type": "http"
         },
         "vnc": {
-            "default_host": "10.8.136.182",
-            "default_port": 5900,
+            "default_host": "127.0.0.1",
+            "default_port": 5901,
             "default_user": "admin"
         },
         "endpoints": {
@@ -970,8 +1015,8 @@ if __name__ == "__main__":
     print("""
     ╔════════════════════════════════════════════════════════════════════╗
     ║      🤖 iFlow 浏览器自动化服务                                        ║
-    ║      版本: 2.1.0                                                    ║
-    ║      架构: FastAPI → iFlow SDK → MCP 浏览器                          ║
+    ║      版本: 2.0.0                                                    ║
+    ║      架构: FastAPI → iFlow SDK → MCP 浏览器                         ║
     ╚════════════════════════════════════════════════════════════════════╝
     """)
 
@@ -985,7 +1030,7 @@ if __name__ == "__main__":
     print()
     print("🧪 测试方法:")
     print("   1. 前端: 打开 frontend/index.html")
-    print("   2. 命令行: curl -X POST http://localhost:8082/browser/stream-task -d '{\"task\":\"打开百度\"}'")
+    print("   2. 浏览器: curl -X POST http://localhost:8082/browser/stream-task -d '{\"task\":\"打开百度\"}'")
     print()
     print("⚠️  启动依赖:")
     print("   1. iflow --experimental-acp --port 8090")

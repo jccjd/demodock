@@ -108,6 +108,8 @@ D:\apps\qemu\qemu-system-x86_64.exe -m 2G -smp 2 -cdrom D:\TinyCore-current.iso 
    D:\apps\qemu\qemu-system-x86_64.exe -m 2G -smp 2 -drive if=pflash,format=raw,readonly=on,file
    =D:\apps\qemu\share\edk2-x86_64-code.fd -cdrom D:\TinyCore-current.iso -net nic -net user -display sdl
    -vnc 127.0.0.1:1
+   
+ qemu  D:\apps\qemu\qemu-system-x86_64.exe -m 2G -smp 2 -cdrom D:\TinyCore-current.iso -net nic -net user -display sdl -vnc 127.0.0.1:1,connections=10
 ```
 
 ✦ 是的！安装后会安装到我们创建的虚拟磁盘 uefi_disk.qcow2 中，并且可以通过 UEFI 启动。

@@ -1,9 +1,22 @@
 {
-  "acpUrl": "ws://localhost:8090/acp",
+  "acpUrl": "ws://127.0.0.1:8090/acp",
   "mcpServers": [
     {
       "name": "aio-sandbox",
-      "httpUrl": "http://localhost:8080/mcp"
+      "httpUrl": "http://10.8.135.251:3000/mcp"
+    },
+    {
+      "name": "mcp-vnc",
+      "command": "mcp-vnc",
+      "env": {
+        "VNC_HOST": "127.0.0.1",
+        "VNC_PORT": "5901",
+        "VNC_PASSWORD": ""
+      }
     }
-  ]
+  ],
+  "skills": {
+    "directories": [".iflow/skills"],
+    "enabled": ["vnc-control", "uefi-control", "system-control"]
+  }
 }

@@ -11,14 +11,14 @@ import sys
 from iflow_sdk import IFlowClient, IFlowOptions, ApprovalMode
 
 # 配置
-IFLOW_URL = "ws://10.8.135.251:8090/acp"
-MCP_HTTP_URL = "http://10.8.135.251:8080/mcp"
+IFLOW_URL = "ws://127.0.0.1:8090/acp"
+MCP_HTTP_URL = "http://127.0.0.1:8080/mcp"
 TIMEOUT = 300.0
 
 # VNC 服务器配置（直接 VNC 连接）
-VNC_HOST = "10.8.136.182"
-VNC_PORT = 5900
-VNC_PASSWORD = "admin"
+VNC_HOST = "127.0.0.1"
+VNC_PORT = 5901
+VNC_PASSWORD = ""
 
 
 async def ai_operate_vm():

@@ -444,10 +444,13 @@
                 };
 
                 ws.onmessage = (e) => {
+                    console.log('WebSocket raw message:', e.data);
                     try {
                         const data = JSON.parse(e.data);
+                        console.log('Parsed message type:', data.type, 'data:', data);
                         handleMessage(data);
                     } catch (err) {
+                        console.log('Non-JSON message:', e.data);
                         addMessage('ai', e.data);
                     }
                 };
@@ -642,34 +645,145 @@ function reconnectVNC() {
         function handleMessage(data) {
             console.log('Received message:', data);
             
-            if (data.type === 'tool_use') {
-                addMessage('tool', `🔧 **${data.tool}**\n\`\`\`json\n${JSON.stringify(data.args, null, 2)}\n\`\`\``);
-                addLog('cmd', `Tool: ${data.tool}`);
+            if (data.type === 'tool_use' || data.type === 'tool_call') {
+                // 工具调用前，先结束当前的流式消息
+                finishCurrentStreamMessage();
+                
+                // 工具调用消息
+                const toolName = data.tool || data.tool_name || 'unknown';
+                const toolArgs = data.args || data.arguments || {};
+                const toolStatus = data.status || 'pending';
+                const toolId = data.id || `${toolName}-${Date.now()}`;
+                
+                // 格式化参数显示
+                let argsDisplay = '';
+                if (Object.keys(toolArgs).length > 0) {
+                    argsDisplay = JSON.stringify(toolArgs, null, 2);
+                } else {
+                    argsDisplay = '(no arguments)';
+                }
+                
+                // 状态图标
+                let statusIcon = '🔄';
+                let statusColor = 'text-blue-600';
+                if (toolStatus === 'completed') {
+                    statusIcon = '✅';
+                    statusColor = 'text-green-600';
+                } else if (toolStatus === 'error') {
+                    statusIcon = '❌';
+                    statusColor = 'text-red-600';
+                }
+                
+                // 检查是否已存在该工具调用的消息
+                const existingMsg = toolCallMessages[toolId];
+                if (existingMsg) {
+                    // 更新现有消息
+                    const contentDiv = existingMsg.querySelector('.tool-content');
+                    if (contentDiv) {
+                        contentDiv.innerHTML = `
+                            <div class="font-bold ${statusColor}">${statusIcon} ${toolName}</div>
+                            <div class="text-[10px] text-slate-400 mt-1">状态: ${toolStatus}</div>
+                            <pre class="text-[9px] bg-slate-100 p-1.5 rounded mt-1 overflow-x-auto">${escapeHtml(argsDisplay)}</pre>
+                        `;
+                    }
+                } else {
+                    // 创建新的工具调用消息
+                    const div = document.createElement('div');
+                    div.className = 'flex justify-start w-full';
+                    div.innerHTML = `
+                        <div class="flex flex-col max-w-[90%]">
+                            <div class="bg-slate-100 border-slate-200 text-slate-600 border p-3 rounded-xl shadow-sm text-xs leading-relaxed">
+                                <div class="tool-content">
+                                    <div class="font-bold ${statusColor}">${statusIcon} ${toolName}</div>
+                                    <div class="text-[10px] text-slate-400 mt-1">状态: ${toolStatus}</div>
+                                    <pre class="text-[9px] bg-slate-100 p-1.5 rounded mt-1 overflow-x-auto">${escapeHtml(argsDisplay)}</pre>
+                                </div>
+                            </div>
+                        </div>`;
+                    chatMessages.appendChild(div);
+                    toolCallMessages[toolId] = div;
+                }
+                
+                addLog('cmd', `Tool: ${toolName} - ${toolStatus}`);
+                
+                // 同时在左侧步骤面板显示工具调用
+                addToolCallToPanel(toolName, toolArgs, toolStatus);
+                
             } else if (data.type === 'task_finish') {
+                // 使用 task_finish 的 full_response 确保消息完整
+                const finalContent = data.full_response || '';
+                if (finalContent) {
+                    // 确保最终消息内容完整
+                    updateOrCreateAIMessage(finalContent, null, false);
+                }
+                
                 // 重置流式状态
                 isStreaming = false;
-                const streamingMsg = chatMessages.querySelector('.streaming-message');
-                if (streamingMsg) {
-                    streamingMsg.classList.remove('streaming-message');
-                }
-                addLog('success', 'Task finished: ' + data.stop_reason);
+                accumulatedThought = '';  // 重置累积的思考内容
+                
+                // 清理工具调用跟踪
+                toolCallMessages = {};
+                
+                // 延迟移除 streaming-message class，确保内容已更新
+                setTimeout(() => {
+                    const streamingMsg = chatMessages.querySelector('.streaming-message');
+                    if (streamingMsg) {
+                        streamingMsg.classList.remove('streaming-message');
+                    }
+                }, 100);
+                
+                addLog('success', 'Task finished: ' + (data.stop_reason || 'completed'));
                 // 标记当前步骤完成
                 advanceStep();
+                
             } else if (data.type === 'assistant' || data.type === 'stream' || data.status === 'streaming') {
                 // 处理流式响应
                 const content = data.full_response || data.chunk || data.content || '';
-                if (content) {
-                    updateOrCreateAIMessage(content);
+                const thought = data.thought || null;
+                const isThoughtMessage = data.subtype === 'thought';  // 纯思考消息
+                console.log('Stream content:', content, 'chunk:', data.chunk, 'full:', data.full_response, 'thought:', thought, 'isThought:', isThoughtMessage);
+                
+                // 如果有内容、有思考、或者 chunk 字段存在，都更新消息
+                // 注意：纯思考消息时 content 可能为空，但 thought 有值
+                if (content || thought || data.chunk !== undefined) {
+                    updateOrCreateAIMessage(content, thought, isThoughtMessage);
                 }
+                
+            } else if (data.type === 'plan') {
+                // 计划消息
+                if (data.entries && data.entries.length > 0) {
+                    const planText = data.entries.map((e, i) => `${i + 1}. ${e.content || e}`).join('\n');
+                    addMessage('system', '📋 Plan:\n' + planText);
+                }
+                
             } else if (data.chunk || data.full_response) {
                 // 兼容其他格式的流式响应
                 updateOrCreateAIMessage(data.full_response || data.chunk);
+                
             } else if (data.content || data.message) {
                 addMessage('ai', data.content || data.message);
+                
             } else if (data.type === 'error') {
-                addMessage('system', '❌ Error: ' + (data.error || data.message));
-                addLog('error', data.error || data.message);
+                addMessage('system', '❌ Error: ' + (data.error || data.message || 'Unknown error'));
+                addLog('error', data.error || data.message || 'Unknown error');
             }
+        }
+        
+        // 在左侧面板添加工具调用显示
+        function addToolCallToPanel(toolName, args, status) {
+            const container = document.getElementById('test-steps-container');
+            const toolDiv = document.createElement('div');
+            toolDiv.className = 'mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-[10px]';
+            
+            const statusIcon = status === 'completed' ? '✅' : (status === 'error' ? '❌' : '🔄');
+            const argsStr = Object.keys(args).length > 0 ? JSON.stringify(args) : '{}';
+            
+            toolDiv.innerHTML = `
+                <div class="font-bold text-blue-700">${statusIcon} ${toolName}</div>
+                <div class="text-slate-500 mono text-[9px] mt-1 truncate">${escapeHtml(argsStr)}</div>
+            `;
+            
+            container.insertBefore(toolDiv, container.firstChild);
         }
 
         function sendMessage() {
@@ -728,15 +842,65 @@ function reconnectVNC() {
         // 流式消息处理：更新或创建 AI 消息
         let isStreaming = false;
         
-        function updateOrCreateAIMessage(content) {
+        // 存储累积的思考内容
+        let accumulatedThought = '';
+        
+        // 工具调用跟踪：用于更新工具状态而非创建新消息
+        let currentToolCallId = null;
+        let toolCallMessages = {};  // 存储工具调用消息的引用
+        
+        // 用于跟踪当前流式消息的本地内容（不依赖后端的 full_response）
+        let currentStreamContent = '';
+        
+        function updateOrCreateAIMessage(content, thought, isThoughtMessage = false) {
+            console.log('=== updateOrCreateAIMessage START ===');
+            console.log('content:', content ? `"${content.substring(0, 100)}..." (${content.length} chars)` : '(empty)');
+            console.log('thought:', thought ? `"${thought.substring(0, 50)}..."` : '(none)');
+            console.log('isThoughtMessage:', isThoughtMessage);
+            console.log('isStreaming:', isStreaming);
+            
             // 查找最后一条正在流式传输的 AI 消息
             const streamingMsg = chatMessages.querySelector('.streaming-message');
+            console.log('Found streamingMsg:', !!streamingMsg);
             
+            // 构建显示内容 - 直接使用传入的 content（后端传来的 full_response 或 chunk）
+            let displayHTML = '';
+            
+            // 如果有思考内容，显示在前面
+            if (thought && thought.trim()) {
+                displayHTML += `
+                    <div class="thought-section bg-amber-50 border border-amber-200 rounded-lg p-2 mb-2 text-[10px]">
+                        <div class="font-bold text-amber-700 mb-1 flex items-center gap-1">
+                            <span>💭</span> 思考过程
+                        </div>
+                        <div class="text-amber-800 whitespace-pre-wrap">${escapeHtml(thought)}</div>
+                    </div>`;
+            }
+            
+            // 显示主内容
+            if (content && content.trim()) {
+                try {
+                    const parsedContent = marked.parse(content);
+                    displayHTML += `<div class="md-prose">${parsedContent}</div>`;
+                    console.log('Parsed markdown successfully, parsed length:', parsedContent.length);
+                } catch (e) {
+                    console.error('Markdown parse error:', e);
+                    displayHTML += `<div class="md-prose">${escapeHtml(content)}</div>`;
+                }
+            } else if (!isThoughtMessage && !thought) {
+                displayHTML += '<div class="md-prose"><span class="text-slate-400 animate-pulse">正在思考...</span></div>';
+            }
+            
+            console.log('displayHTML length:', displayHTML.length);
+            
+            // 检查是否存在 streaming-message 元素
             if (streamingMsg && isStreaming) {
                 // 更新现有消息
-                const proseDiv = streamingMsg.querySelector('.md-prose');
-                if (proseDiv) {
-                    proseDiv.innerHTML = marked.parse(content);
+                const contentDiv = streamingMsg.querySelector('.message-content');
+                console.log('Found contentDiv:', !!contentDiv);
+                if (contentDiv) {
+                    contentDiv.innerHTML = displayHTML;
+                    console.log('Updated existing message HTML');
                 }
             } else {
                 // 创建新的流式消息
@@ -747,12 +911,27 @@ function reconnectVNC() {
                     <div class="flex flex-col max-w-[90%] streaming-message">
                         <span class="text-[10px] font-bold text-slate-400 ml-1 mb-1">AI Agent</span>
                         <div class="bg-white border-slate-200 text-slate-700 border p-3 rounded-2xl rounded-tl-sm shadow-sm text-xs leading-relaxed">
-                            <div class="md-prose">${marked.parse(content)}</div>
+                            <div class="message-content">${displayHTML}</div>
                         </div>
                     </div>`;
                 chatMessages.appendChild(div);
+                console.log('Created and appended new message');
             }
+            
+            console.log('chatMessages children count:', chatMessages.children.length);
+            console.log('=== updateOrCreateAIMessage END ===');
+            
             chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // 结束当前流式消息，允许下一个消息创建新气泡
+        function finishCurrentStreamMessage() {
+            const streamingMsg = chatMessages.querySelector('.streaming-message');
+            if (streamingMsg) {
+                streamingMsg.classList.remove('streaming-message');
+            }
+            isStreaming = false;
+            accumulatedThought = '';
         }
 
         function updateLastAIMessage(content) {
