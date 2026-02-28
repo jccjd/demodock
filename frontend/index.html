@@ -3,34 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VIBE Studio - Full IDE</title>
+    <title>VIBE Studio - iFlow CLI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-        body { font-family: 'Inter', sans-serif; color: #334155; }
-        .mono { font-family: 'JetBrains Mono', monospace; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        * { box-sizing: border-box; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        .mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
         
         /* 滚动条美化 */
         .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #94a3b8; }
-        .terminal-scroll::-webkit-scrollbar-thumb { background: #475569; }
+        .terminal-scroll::-webkit-scrollbar { width: 6px; }
+        .terminal-scroll::-webkit-scrollbar-track { background: transparent; }
+        .terminal-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
 
-        /* Markdown 排版样式 */
-        .md-prose { font-size: 11px; line-height: 1.6; color: #334155; word-wrap: break-word; }
+        /* Markdown 专属排版样式 */
+        .md-prose { font-size: 12px; line-height: 1.6; color: #334155; word-wrap: break-word; }
         .md-prose p { margin-bottom: 0.5rem; }
         .md-prose p:last-child { margin-bottom: 0; }
         .md-prose strong { font-weight: 600; color: #0f172a; }
         .md-prose ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.5rem; }
         .md-prose ol { list-style-type: decimal; padding-left: 1.25rem; margin-bottom: 0.5rem; }
         .md-prose li { margin-bottom: 0.25rem; }
-        .md-prose code { font-family: 'JetBrains Mono', monospace; background-color: rgba(0,0,0,0.06); padding: 0.1rem 0.25rem; border-radius: 0.25rem; color: #db2777; font-size: 10px; }
+        .md-prose code { font-family: 'JetBrains Mono', monospace; background-color: rgba(0,0,0,0.06); padding: 0.1rem 0.25rem; border-radius: 0.25rem; color: #db2777; font-size: 11px; }
         .md-prose pre { background-color: #f1f5f9; padding: 0.75rem; border-radius: 0.375rem; overflow-x: auto; margin-bottom: 0.5rem; border: 1px solid #e2e8f0; }
         .md-prose pre code { background-color: transparent; padding: 0; color: #334155; }
         
+        /* AI 聊天区 Markdown 样式 (深色主题) */
+        .md-dark { font-size: 12px; line-height: 1.6; color: #d4d4d4; word-wrap: break-word; }
+        .md-dark p { margin-bottom: 0.4rem; }
+        .md-dark p:last-child { margin-bottom: 0; }
+        .md-dark strong { font-weight: 600; color: #58a6ff; }
+        .md-dark ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.4rem; }
+        .md-dark ol { list-style-type: decimal; padding-left: 1.25rem; margin-bottom: 0.4rem; }
+        .md-dark li { margin-bottom: 0.2rem; }
+        .md-dark code { font-family: 'JetBrains Mono', monospace; background-color: #264f78; padding: 0.1rem 0.25rem; border-radius: 0.25rem; color: #ce9178; font-size: 11px; }
+        .md-dark pre { background-color: #1e1e1e; padding: 0.5rem; border-radius: 0.25rem; overflow-x: auto; margin-bottom: 0.4rem; border: 1px solid #3c3c3c; }
+        .md-dark pre code { background-color: transparent; padding: 0; color: #d4d4d4; }
+
         /* 步骤卡片手风琴动画 */
         .step-details {
             max-height: 0; overflow: hidden;
@@ -39,6 +55,32 @@
         .step-details.expanded { max-height: 1200px; opacity: 1; overflow-y: auto; }
         .rotate-icon { transition: transform 0.2s; }
         .expanded .rotate-icon { transform: rotate(180deg); }
+        
+        /* 光标闪烁 */
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        .cursor-blink { animation: blink 1s infinite; }
+        
+        /* 底部面板 Tab 样式 */
+        .bottom-tab { 
+            padding: 4px 12px; 
+            font-size: 11px; 
+            font-weight: 500;
+            color: #6e7681;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .bottom-tab:hover { color: #e6edf3; }
+        .bottom-tab.active { 
+            color: #e6edf3; 
+            border-bottom-color: #58a6ff;
+        }
+        
+        /* 隐藏面板 */
+        .panel-hidden { display: none !important; }
     </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden text-[13px] bg-slate-50 antialiased">
@@ -47,155 +89,131 @@
     <header class="h-12 border-b border-slate-200 bg-white flex items-center justify-between px-4 shrink-0 z-20 shadow-sm">
         <div class="flex items-center space-x-6">
             <div class="flex items-center space-x-2">
-                <div class="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center text-white font-bold text-sm shadow-inner">V</div>
+                <div class="w-7 h-7 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-md flex items-center justify-center text-white font-bold text-sm shadow-inner">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
                 <span class="font-bold text-slate-800 tracking-tight">VIBE STUDIO</span>
             </div>
             <div class="flex items-center space-x-2 text-xs">
                 <span class="text-slate-400">Task:</span>
-                <span id="header-task-title" class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-medium border border-slate-200 truncate max-w-md">cTDP Consistency Test</span>
+                <span id="header-task-title" class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-medium border border-slate-200 truncate max-w-md">iFlow CLI Console</span>
             </div>
         </div>
         <div class="flex items-center space-x-4">
+            <!-- 连接状态 -->
+            <div class="flex items-center space-x-2 px-3 py-1 bg-slate-100 rounded border border-slate-200 shadow-inner">
+                <span id="status-dot" class="w-2 h-2 rounded-full bg-red-500"></span>
+                <span id="status-text" class="text-[11px] text-slate-600 font-bold mono">Offline</span>
+            </div>
+            <!-- 设备 IP -->
             <div class="flex items-center space-x-2 px-3 py-1 bg-slate-100 rounded border border-slate-200 shadow-inner">
                 <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <span id="header-device-ip" class="text-[11px] text-slate-600 font-bold mono">Hygon 7002</span>
+                <span id="header-device-ip" class="text-[11px] text-slate-600 font-bold mono">localhost:8082</span>
             </div>
-            <button onclick="submitReport()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-[11px] font-bold shadow-sm hover:bg-blue-700 transition-colors">Submit Report</button>
         </div>
     </header>
 
     <div class="flex-1 flex overflow-hidden">
         
         <!-- 2. 左侧测试步骤 Explorer -->
-        <aside class="w-[340px] border-r border-slate-200 bg-white flex flex-col shrink-0 z-10 shadow-[2px_0_8px_rgba(0,0,0,0.02)]">
+        <aside class="w-[320px] border-r border-slate-200 bg-white flex flex-col shrink-0 z-10 shadow-[2px_0_8px_rgba(0,0,0,0.02)]">
             <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                 <span class="text-[11px] font-bold text-slate-700 uppercase tracking-widest flex items-center gap-1.5">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                     Execution Steps
                 </span>
-                <span id="step-count-badge" class="bg-slate-200 text-slate-600 text-[10px] px-1.5 py-0.5 rounded font-bold">4</span>
+                <span id="step-count-badge" class="bg-slate-200 text-slate-600 text-[10px] px-1.5 py-0.5 rounded font-bold">0</span>
             </div>
-            <div class="flex-1 overflow-y-auto custom-scrollbar p-2.5 bg-slate-50/50" id="test-steps-container"></div>
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-2.5 bg-slate-50/50" id="test-steps-container">
+                <!-- 默认提示 -->
+                <div class="text-center py-8 text-slate-400 text-xs">
+                    <svg class="w-8 h-8 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                    暂无测试步骤<br>发送指令后将显示执行步骤
+                </div>
+            </div>
         </aside>
 
-        <!-- 3. 中部工作区 (VNC + Terminal) -->
+        <!-- 3. 中部工作区 (VNC + 底部 AI Panel) -->
         <main class="flex-1 flex flex-col min-w-[300px] bg-slate-200/80">
+            <!-- VNC Tab -->
             <div class="h-10 flex items-end px-2 pt-2 space-x-1 shrink-0">
-                <button id="tab-bios" onclick="switchTab('bios')" class="px-4 py-2 bg-white border border-b-0 border-slate-200 text-[11px] font-bold text-blue-600 rounded-t-lg shadow-sm flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-                    KVM VNC
-                </button>
-                <button id="tab-bmc" onclick="switchTab('bmc')" class="px-4 py-2 bg-slate-100 text-[11px] font-medium text-slate-500 hover:bg-white rounded-t-lg transition-colors flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
-                    BMC Web
-                </button>
+                <button id="tab-console" onclick="UI.switchTab('console')" class="px-4 py-2 bg-white border border-b-0 border-slate-200 text-[11px] font-bold text-blue-600 rounded-t-lg shadow-sm">OS Console</button>
+                <button id="tab-bmc" onclick="UI.switchTab('bmc')" class="px-4 py-2 bg-slate-100 text-[11px] font-medium text-slate-500 hover:bg-white rounded-t-lg transition-colors">BMC Web</button>
             </div>
-            <div class="flex-1 p-4 flex flex-col min-h-[40%]">
+            
+            <!-- VNC 区域 -->
+            <div class="flex-1 p-4 flex flex-col min-h-[200px]">
                 <div class="flex-1 bg-[#0f111a] rounded-xl overflow-hidden border border-slate-800 shadow-2xl relative flex items-center justify-center">
-                    <!-- BIOS Panel -->
-                    <div id="bios-panel" class="w-full h-full flex flex-col bg-gradient-to-b from-slate-900 to-slate-800 relative">
-                        <!-- VNC 头部信息栏 -->
-                        <div class="px-4 py-2 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between shrink-0">
-                            <div class="flex items-center gap-2">
-                                <div class="w-2 h-2 rounded-full" id="vnc-status-dot" style="background-color: #ef4444;"></div>
-                                <span class="text-white text-xs font-medium">KVM VNC</span>
-                                <span class="text-slate-400 text-[10px] mono" id="vnc-connection-info">localhost:6080 (websockify)</span>
-                            </div>
-                            <div class="flex items-center gap-1">
-                                <!-- 虚拟机控制按钮 -->
-                                <button onclick="vmControl('start')" class="text-slate-400 hover:text-green-400 text-[10px] px-2 py-1 rounded hover:bg-slate-700 transition-colors flex items-center gap-1" title="启动虚拟机">
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                    启动
-                                </button>
-                                <button onclick="vmControl('shutdown')" class="text-slate-400 hover:text-yellow-400 text-[10px] px-2 py-1 rounded hover:bg-slate-700 transition-colors flex items-center gap-1" title="关闭虚拟机">
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
-                                    关闭
-                                </button>
-                                <button onclick="vmControl('reboot')" class="text-slate-400 hover:text-blue-400 text-[10px] px-2 py-1 rounded hover:bg-slate-700 transition-colors flex items-center gap-1" title="重启虚拟机">
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                                    重启
-                                </button>
-                                <button onclick="vmControl('stop')" class="text-slate-400 hover:text-red-400 text-[10px] px-2 py-1 rounded hover:bg-slate-700 transition-colors flex items-center gap-1" title="强制停止">
-                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
-                                    强停
-                                </button>
-                                <div class="w-px h-4 bg-slate-600 mx-1"></div>
-                                <button onclick="reconnectVNC()" class="text-slate-400 hover:text-white text-[10px] px-2 py-1 rounded hover:bg-slate-700 transition-colors">
-                                    重连
-                                </button>
-                            </div>
+                    <iframe id="vnc-frame" src="about:blank" class="w-full h-full border-0 absolute inset-0 z-10 hidden"></iframe>
+                    <div id="vnc-placeholder" class="absolute inset-0 flex flex-col items-center justify-center z-0">
+                        <div class="w-14 h-14 mb-3 rounded-xl bg-slate-800 flex items-center justify-center">
+                            <svg class="w-7 h-7 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                            </svg>
                         </div>
-                        <!-- VNC 图像显示区域 -->
-                        <div class="flex-1 relative flex items-center justify-center overflow-hidden bg-black">
-                            <!-- 连接中/错误提示 -->
-                            <div id="vnc-placeholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/50 p-8 z-10">
-                                <div class="w-12 h-12 mb-3 rounded-full bg-slate-700 flex items-center justify-center animate-pulse" id="vnc-icon-bg">
-                                    <svg class="w-6 h-6 text-blue-400" id="vnc-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-                                    </svg>
-                                </div>
-                                <div class="text-white text-sm font-medium mb-1" id="vnc-status-text">正在连接...</div>
-                                <div class="text-slate-400 text-xs text-center leading-relaxed max-w-md" id="vnc-status-detail">等待 VNC 图像流</div>
-                            </div>
-                            <!-- noVNC iframe -->
-                            <iframe id="vnc-iframe" class="hidden w-full h-full border-0" allow="fullscreen"></iframe>
+                        <span class="text-slate-500 text-sm" id="vnc-msg">Waiting for VNC connection...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 底部 AI Agent Protocol 面板 (参考图片样式) -->
+            <div class="h-[420px] bg-[#1e1e2e] flex flex-col shrink-0 border-t border-[#3c3c4f] shadow-[0_-5px_15px_rgba(0,0,0,0.2)]">
+                <!-- Tab 栏 -->
+                <div class="flex items-center justify-between px-2 bg-[#181825] h-9 shrink-0 border-b border-[#3c3c4f]">
+                    <div class="flex items-center">
+                        <button id="bottom-tab-ai" onclick="BottomPanel.switchTab('ai')" class="bottom-tab active">
+                            <span class="flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                                AI Agent Protocol
+                            </span>
+                        </button>
+                        <button id="bottom-tab-logs" onclick="BottomPanel.switchTab('logs')" class="bottom-tab">
+                            <span class="flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                                System Logs
+                            </span>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <!-- 连接状态 -->
+                        <div class="flex items-center space-x-1.5 px-2 py-0.5 bg-black/30 rounded text-[10px]">
+                            <span id="ws-dot" class="w-2 h-2 bg-red-500 rounded-full"></span>
+                            <span id="ws-text" class="text-slate-400">Offline</span>
+                        </div>
+                        <button onclick="BottomPanel.clearCurrent()" class="text-slate-500 hover:text-white text-[10px] uppercase tracking-wider font-bold transition-colors px-2">Clear</button>
+                    </div>
+                </div>
+                
+                <!-- AI Chat 面板 -->
+                <div id="panel-ai" class="flex-1 flex flex-col min-h-0">
+                    <!-- 聊天记录 -->
+                    <div id="chat-messages" class="flex-1 overflow-y-auto p-4 terminal-scroll mono text-[12px] leading-relaxed space-y-3">
+                        <div class="text-center text-[11px] text-slate-500 my-2">Waiting for server connection...</div>
+                    </div>
+                    <!-- 输入区 -->
+                    <div class="border-t border-[#3c3c4f] p-3 bg-[#181825] shrink-0">
+                        <div class="flex items-center gap-3 bg-[#1e1e1e] rounded-lg px-4 py-3 border border-[#3c3c4f] focus-within:border-blue-500 transition-colors">
+                            <span class="text-blue-400 text-base">›</span>
+                            <input 
+                                id="chat-input" 
+                                type="text" 
+                                placeholder="Type your message or instruction... (Enter to send)" 
+                                class="flex-1 bg-transparent text-[14px] text-slate-200 placeholder-slate-500 outline-none mono disabled:opacity-50"
+                                disabled
+                            >
+                            <button id="send-btn" onclick="ChatClient.sendMessage()" class="px-4 py-2 bg-blue-600 text-white rounded-md text-[12px] font-medium hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 transition-colors" disabled>
+                                Send
+                            </button>
                         </div>
                     </div>
-                    <!-- BMC iframe -->
-                    <iframe id="bmc-frame" src="" class="w-full h-full border-0 absolute inset-0 z-10 hidden"></iframe>
                 </div>
-            </div>
-            <!-- 底部 Terminal 面板 -->
-            <div class="h-56 bg-[#1e1e2e] flex flex-col shrink-0 border-t border-slate-800 shadow-[0_-5px_15px_rgba(0,0,0,0.1)]">
-                <div class="flex items-center justify-between px-4 bg-[#181825] h-8 shrink-0">
-                    <span class="text-[#89b4fa] text-[10px] font-bold uppercase tracking-wider">System Output Logs</span>
-                    <button onclick="clearLogs()" class="text-slate-500 hover:text-white text-[10px] uppercase tracking-wider font-bold transition-colors">Clear</button>
-                </div>
-                <div id="terminal-output" class="flex-1 overflow-y-auto p-3 terminal-scroll mono text-[12px] leading-relaxed"></div>
+                
+                <!-- System Logs 面板 -->
+                <div id="panel-logs" class="flex-1 overflow-y-auto p-3 terminal-scroll mono text-[12px] leading-relaxed panel-hidden"></div>
             </div>
         </main>
 
-        <!-- 4. 右侧 AI 通信区 -->
-        <aside class="w-96 border-l border-slate-200 bg-white flex flex-col shrink-0 shadow-xl z-10">
-            <!-- 头部状态 -->
-            <div class="px-4 py-3 bg-slate-800 flex items-center justify-between shrink-0">
-                <div class="flex items-center space-x-2">
-                    <div class="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                    </div>
-                    <span class="text-white font-bold text-sm tracking-wide">AI Agent Protocol</span>
-                </div>
-                <div class="flex items-center space-x-1.5 px-2 py-1 bg-black/30 rounded text-[10px]">
-                    <span id="ws-dot" class="w-2 h-2 bg-slate-500 rounded-full"></span>
-                    <span id="ws-text" class="text-slate-300">Offline</span>
-                </div>
-            </div>
-
-            <!-- 快捷指令 -->
-            <div class="px-4 py-2 bg-white border-b border-slate-100">
-                <div class="text-[10px] text-slate-400 font-medium mb-2">Quick Commands:</div>
-                <div class="flex flex-wrap gap-1.5">
-                    <button onclick="quickCommand('帮我打开百度搜索人工智能')" class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-medium hover:bg-slate-200 transition-colors">搜索</button>
-                    <button onclick="quickCommand('列出当前工作目录的文件')" class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-medium hover:bg-slate-200 transition-colors">列文件</button>
-                    <button onclick="quickCommand('帮我分析代码结构')" class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[10px] font-medium hover:bg-slate-200 transition-colors">分析代码</button>
-                </div>
-            </div>
-
-            <!-- 聊天记录容器 -->
-            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-slate-50/50">
-                <div class="text-center text-[10px] text-slate-400 my-2">Waiting for server connection...</div>
-            </div>
-
-            <!-- 输入区 -->
-            <div class="p-4 bg-white border-t border-slate-200 shrink-0">
-                <div class="relative flex items-end border border-slate-300 rounded-lg focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all bg-slate-50">
-                    <textarea id="chat-input" rows="2" placeholder="Send instruction... (Ctrl+Enter)" class="w-full bg-transparent py-2.5 pl-3 pr-10 text-xs outline-none resize-none disabled:opacity-50" disabled></textarea>
-                    <button id="send-btn" onclick="sendMessage()" class="absolute right-2 bottom-2 p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-slate-300 transition-colors" disabled>
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
-                    </button>
-                </div>
-            </div>
-        </aside>
+        <!-- 4. 右侧面板 - 移除，已整合到底部 -->
     </div>
 
     <!-- ========================================== -->
@@ -207,801 +225,451 @@
         const AppConfig = {
             WS_URL: `ws://${HOST}:8082/ws`,
             HEALTH_URL: `http://${HOST}:8082/health`,
-            VNC_BMC_URL: `http://10.8.135.251:3000/vnc/index.html?autoconnect=true`,
-            VNC_WS_URL: `ws://${HOST}:8082/vnc`,
-            VNC_WEBSOCKIFY_URL: `ws://${HOST}:6080/websockify`,  // websockify WebSocket 地址（本地）
-            VNC_NOVNC_URL: `novnc/vnc_lite.html?host=${HOST}&port=6080&path=websockify`,  // noVNC 页面（带参数）
-            BIOS_VNC_ADDR: `${HOST}:5900`
+            VNC_CONSOLE_URL: `novnc/vnc_lite.html?host=${HOST}&port=6080&path=websockify`,
+            VNC_BMC_URL: `http://10.8.135.251:3000/vnc/index.html?autoconnect=true`
         };
 
         // 初始化 marked 选项
         marked.setOptions({ gfm: true, breaks: true });
 
-        // 测试步骤数据
-        const testSteps = [
-            {
-                step_id: 1,
-                step_number: 1,
-                description: "进入 BIOS Setup，导航至以下路径：\n\n**CBS → NBIO → cTDP Control**\n\n将模式设置为 `Manual`，目标功率设置为 `280W`。",
-                expected_result: "cTDP 配置成功保存，重启后生效",
-                actual_result: "",
-                status: "1" // Running
-            },
-            {
-                step_id: 2,
-                step_number: 2,
-                description: "通过 BMC Web 界面检查系统事件日志：\n\n1. 登录 BMC Web 控制台\n2. 导航至 **Server Health → Event Log**\n3. 确认无硬件告警",
-                expected_result: "无 Critical 或 Warning 级别事件",
-                actual_result: "",
-                status: "0" // Waiting
-            },
-            {
-                step_id: 3,
-                step_number: 3,
-                description: "在 OS 下执行压力测试：\n\n```bash\nstress-ng --cpu 64 --timeout 3600s\n```\n\n监控 CPU 频率和功耗变化。",
-                expected_result: "CPU 频率稳定，功耗接近 cTDP 设定值",
-                actual_result: "",
-                status: "0"
-            },
-            {
-                step_id: 4,
-                step_number: 4,
-                description: "验证系统拓扑结构：\n\n```bash\nlscpu\nlstopo\n```\n\n确认 NUMA 节点和 CPU 拓扑正确。",
-                expected_result: "拓扑结构与预期一致",
-                actual_result: "",
-                status: "0"
-            }
-        ];
-
-        // WebSocket 相关变量
-        let ws = null;
-        let isConnected = false;
-        let vncWs = null;
+        // 状态变量
+        let currentAIMessage = null;
+        let toolCallMessages = {};
+        let executionSteps = [];
         let vncConnected = false;
 
-        // DOM 元素引用
-        const chatMessages = document.getElementById('chat-messages');
-        const chatInput = document.getElementById('chat-input');
-        const sendBtn = document.getElementById('send-btn');
-        const terminalOutput = document.getElementById('terminal-output');
-        const vncIframe = document.getElementById('vnc-iframe');
-        const vncPlaceholder = document.getElementById('vnc-placeholder');
-        const vncStatusDot = document.getElementById('vnc-status-dot');
-        const vncStatusText = document.getElementById('vnc-status-text');
-        const vncStatusDetail = document.getElementById('vnc-status-detail');
-        const vncIconBg = document.getElementById('vnc-icon-bg');
-        const vncIcon = document.getElementById('vnc-icon');
+        // 1. UI 模块
+        const UI = {
+            switchTab(tabId) {
+                const tabs = { 
+                    console: document.getElementById('tab-console'), 
+                    bmc: document.getElementById('tab-bmc') 
+                };
+                const frame = document.getElementById('vnc-frame');
+                const activeCls = "px-4 py-2 bg-white border border-b-0 border-slate-200 text-[11px] font-bold text-blue-600 rounded-t-lg shadow-sm";
+                const inactiveCls = "px-4 py-2 bg-slate-100 text-[11px] font-medium text-slate-500 hover:bg-white rounded-t-lg transition-colors";
 
-        // ==========================================
-        // Tab 切换
-        // ==========================================
-        function switchTab(tabId) {
-            const tabBios = document.getElementById('tab-bios');
-            const tabBmc = document.getElementById('tab-bmc');
-            const biosPanel = document.getElementById('bios-panel');
-            const bmcFrame = document.getElementById('bmc-frame');
-
-            const activeCls = "px-4 py-2 bg-white border border-b-0 border-slate-200 text-[11px] font-bold text-blue-600 rounded-t-lg shadow-sm flex items-center gap-2";
-            const inactiveCls = "px-4 py-2 bg-slate-100 text-[11px] font-medium text-slate-500 hover:bg-white rounded-t-lg transition-colors flex items-center gap-2";
-
-            if (tabId === 'bios') {
-                tabBios.className = activeCls;
-                tabBmc.className = inactiveCls;
-                biosPanel.classList.remove('hidden');
-                bmcFrame.classList.add('hidden');
-                addLog('info', 'Switched to BIOS Console');
-                // 连接 VNC
-                if (!vncConnected) {
-                    connectVNC();
+                if (tabId === 'console') {
+                    tabs.console.className = activeCls; 
+                    tabs.bmc.className = inactiveCls;
+                    frame.src = AppConfig.VNC_CONSOLE_URL;
+                } else {
+                    tabs.bmc.className = activeCls; 
+                    tabs.console.className = inactiveCls;
+                    frame.src = AppConfig.VNC_BMC_URL;
                 }
-            } else {
-                tabBmc.className = activeCls;
-                tabBios.className = inactiveCls;
-                biosPanel.classList.add('hidden');
-                bmcFrame.classList.remove('hidden');
-                if (!bmcFrame.src || bmcFrame.src === '' || bmcFrame.src === window.location.href) {
-                    bmcFrame.src = AppConfig.VNC_BMC_URL;
+                
+                if (vncConnected) {
+                    frame.classList.remove('hidden');
+                    document.getElementById('vnc-placeholder').classList.add('hidden');
                 }
-                addLog('info', 'Switched to BMC Web Console');
             }
-        }
+        };
 
-        // ==========================================
-        // 测试步骤管理 (手风琴式)
-        // ==========================================
-        function renderTestSteps() {
-            const container = document.getElementById('test-steps-container');
-            container.innerHTML = '';
-            
-            const statusMap = {
-                "0": { text: "Waiting", border: "border-slate-200", bg: "bg-white", badge: "bg-slate-100 text-slate-500", icon: "⏳" },
-                "1": { text: "Running", border: "border-blue-400", bg: "bg-blue-50/50", badge: "bg-blue-100 text-blue-700", icon: "🔄" },
-                "2": { text: "Failed", border: "border-red-300", bg: "bg-red-50/50", badge: "bg-red-100 text-red-700", icon: "❌" },
-                "3": { text: "Pass", border: "border-emerald-300", bg: "bg-emerald-50/30", badge: "bg-emerald-100 text-emerald-700", icon: "✅" }
-            };
-
-            testSteps.forEach((step, index) => {
-                const statusObj = statusMap[step.status] || statusMap["0"];
-                const htmlDesc = marked.parse(step.description || '无描述');
-                const htmlExpected = marked.parse(step.expected_result || '无预期结果');
-                const htmlActual = step.actual_result ? marked.parse(step.actual_result) : null;
-                const isExpanded = step.status === "1" ? 'expanded' : '';
-                const hasShadow = step.status === "1" ? 'shadow-md' : '';
-
-                container.innerHTML += `
-                    <div class="mb-3 rounded-lg border ${statusObj.border} ${statusObj.bg} transition-shadow duration-300 ${hasShadow} bg-white">
-                        <div class="px-3 py-2.5 cursor-pointer flex flex-col gap-1.5 select-none" onclick="toggleStep(this)">
-                            <div class="flex justify-between items-center">
-                                <span class="font-bold text-[12px] text-slate-800 flex items-center gap-1.5">
-                                    <span>${statusObj.icon}</span> 
-                                    Step ${step.step_number}
-                                </span>
-                                <div class="flex items-center gap-2">
-                                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${statusObj.badge}">${statusObj.text}</span>
-                                    <svg class="w-4 h-4 text-slate-400 rotate-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                </div>
-                            </div>
-                            <div class="text-[11px] text-slate-500 truncate pr-6">${step.description.split('\n')[0].substring(0, 50)}...</div>
-                        </div>
-                        <div class="step-details ${isExpanded} border-t border-slate-100/80 bg-slate-50/30 rounded-b-lg custom-scrollbar">
-                            <div class="p-4 flex flex-col gap-4">
-                                <div>
-                                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
-                                        Description
-                                    </div>
-                                    <div class="md-prose">${htmlDesc}</div>
-                                </div>
-                                <div class="pt-3 border-t border-slate-200 border-dashed">
-                                    <div class="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                        Expected
-                                    </div>
-                                    <div class="md-prose">${htmlExpected}</div>
-                                </div>
-                                ${htmlActual ? `
-                                <div class="pt-3 border-t border-slate-200 border-dashed">
-                                    <div class="text-[10px] font-bold ${step.status === '2' ? 'text-red-500' : 'text-emerald-500'} uppercase tracking-wider mb-1.5">Actual Result</div>
-                                    <div class="md-prose ${step.status === '2' ? 'text-red-700 bg-red-50/50 p-2 rounded border border-red-100' : ''}">${htmlActual}</div>
-                                </div>` : ''}
-                            </div>
-                        </div>
-                    </div>`;
-            });
-        }
-
-        function toggleStep(element) {
-            const detailsDiv = element.nextElementSibling;
-            const wrapperDiv = element.parentElement;
-            if (detailsDiv.classList.contains('expanded')) {
-                detailsDiv.classList.remove('expanded');
-                wrapperDiv.classList.remove('shadow-md');
-            } else {
-                document.querySelectorAll('.step-details.expanded').forEach(el => {
-                    el.classList.remove('expanded');
-                    el.parentElement.classList.remove('shadow-md');
-                });
-                detailsDiv.classList.add('expanded');
-                wrapperDiv.classList.add('shadow-md');
+        // 2. 底部面板模块
+        const BottomPanel = {
+            currentTab: 'ai',
+            switchTab(tabId) {
+                this.currentTab = tabId;
+                const tabAI = document.getElementById('bottom-tab-ai');
+                const tabLogs = document.getElementById('bottom-tab-logs');
+                const panelAI = document.getElementById('panel-ai');
+                const panelLogs = document.getElementById('panel-logs');
+                
+                if (tabId === 'ai') {
+                    tabAI.classList.add('active');
+                    tabLogs.classList.remove('active');
+                    panelAI.classList.remove('panel-hidden');
+                    panelLogs.classList.add('panel-hidden');
+                } else {
+                    tabLogs.classList.add('active');
+                    tabAI.classList.remove('active');
+                    panelLogs.classList.remove('panel-hidden');
+                    panelAI.classList.add('panel-hidden');
+                }
+            },
+            clearCurrent() {
+                if (this.currentTab === 'ai') {
+                    ChatClient.clearChat();
+                } else {
+                    Logger.clear();
+                }
             }
-        }
+        };
 
-        // ==========================================
-        // Terminal 日志
-        // ==========================================
-        function addLog(type, message) {
-            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-            const div = document.createElement('div');
-            div.className = 'flex space-x-3 mb-1 hover:bg-white/5 px-1 rounded';
-            let color = type === 'error' ? 'text-[#ef5350]' : (type === 'success' ? 'text-[#addb67]' : (type === 'cmd' ? 'text-[#82aaff]' : 'text-[#a6accd]'));
-            let prefix = type === 'error' ? '[ERROR]' : (type === 'success' ? '[SUCCESS]' : (type === 'cmd' ? '[EXEC]' : '[INFO]'));
-            div.innerHTML = `<span class="text-[#4d5566] shrink-0">[${time}]</span> <span class="${color} shrink-0">${prefix}</span> <span class="text-[#a6accd] whitespace-pre-wrap break-words">${escapeHtml(message)}</span>`;
-            terminalOutput.appendChild(div);
-            terminalOutput.scrollTop = terminalOutput.scrollHeight;
-        }
+        // 3. Logger 模块
+        const Logger = {
+            container: document.getElementById('panel-logs'),
+            log(type, message) {
+                const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+                const div = document.createElement('div');
+                div.className = 'flex space-x-3 mb-1 hover:bg-white/5 px-1 rounded';
+                let color = type === 'error' ? 'text-[#ef5350]' : (type === 'success' ? 'text-[#6ac96a]' : (type === 'cmd' ? 'text-[#82aaff]' : 'text-[#a6accd]'));
+                let prefix = type === 'error' ? '[ERROR]' : (type === 'success' ? '[SUCCESS]' : (type === 'cmd' ? '[EXEC]' : '[INFO]'));
+                div.innerHTML = `<span class="text-[#6e7681] shrink-0">[${time}]</span> <span class="${color} shrink-0">${prefix}</span> <span class="text-[#d4d4d4] whitespace-pre-wrap break-words">${this.escape(message)}</span>`;
+                this.container.appendChild(div);
+                this.container.scrollTop = this.container.scrollHeight;
+            },
+            clear() { this.container.innerHTML = ''; },
+            escape(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
+        };
 
-        function clearLogs() {
-            terminalOutput.innerHTML = '';
-            addLog('info', 'Logs cleared');
-        }
+        // 4. 测试步骤模块
+        const TestManager = {
+            steps: [],
+            stripMarkdown(mdText) {
+                if (!mdText) return 'No description';
+                let plainText = mdText
+                    .replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/(\*|_)(.*?)\1/g, '$2')
+                    .replace(/```[\s\S]*?```/g, ' [Code Block] ').replace(/`([^`]+)`/g, '$1')
+                    .replace(/^(\d+\\\.|-|\*|\+)\s+/gm, '').replace(/\\/g, '').replace(/\n/g, ' ').trim();
+                return plainText.length > 55 ? plainText.substring(0, 55) + '...' : plainText;
+            },
+            addStep(step) {
+                this.steps.push(step);
+                document.getElementById('step-count-badge').textContent = this.steps.length;
+                this.render();
+            },
+            updateStep(stepId, status, actualResult) {
+                const step = this.steps.find(s => s.step_id === stepId);
+                if (step) {
+                    step.status = status;
+                    if (actualResult) step.actual_result = actualResult;
+                    this.render();
+                }
+            },
+            toggleStep(element) {
+                const detailsDiv = element.nextElementSibling;
+                const wrapperDiv = element.parentElement;
+                if (detailsDiv.classList.contains('expanded')) {
+                    detailsDiv.classList.remove('expanded'); wrapperDiv.classList.remove('shadow-md');
+                } else {
+                    document.querySelectorAll('.step-details.expanded').forEach(el => { el.classList.remove('expanded'); el.parentElement.classList.remove('shadow-md'); });
+                    detailsDiv.classList.add('expanded'); wrapperDiv.classList.add('shadow-md');
+                }
+            },
+            render() {
+                const container = document.getElementById('test-steps-container');
+                container.innerHTML = '';
+                const statusMap = {
+                    "0": { text: "Waiting", border: "border-slate-200", bg: "bg-white", badge: "bg-slate-100 text-slate-500", icon: "⏳" },
+                    "1": { text: "Pass", border: "border-emerald-300", bg: "bg-emerald-50/30", badge: "bg-emerald-100 text-emerald-700", icon: "✅" },
+                    "2": { text: "Failed", border: "border-red-300", bg: "bg-red-50/50", badge: "bg-red-100 text-red-700", icon: "❌" },
+                    "3": { text: "Running", border: "border-blue-400", bg: "bg-blue-50/50", badge: "bg-blue-100 text-blue-700", icon: "🔄" }
+                };
 
-        function escapeHtml(text) {
-            const d = document.createElement('div');
-            d.textContent = text;
-            return d.innerHTML;
-        }
-
-        // ==========================================
-        // WebSocket 通信
-        // ==========================================
-        async function connectWebSocket() {
-            // 先检查服务器健康状态
-            try {
-                const response = await fetch(AppConfig.HEALTH_URL, { method: 'GET' });
-                if (!response.ok) {
-                    showServiceDependencyInfo();
-                    setTimeout(connectWebSocket, 5000);
+                if (this.steps.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-8 text-slate-400 text-xs">
+                            <svg class="w-8 h-8 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                            暂无测试步骤<br>发送指令后将显示执行步骤
+                        </div>`;
                     return;
                 }
-            } catch (e) {
-                showServiceDependencyInfo();
-                setTimeout(connectWebSocket, 5000);
-                return;
-            }
 
-            updateStatus('connecting');
-            addLog('info', `Connecting to ${AppConfig.WS_URL}...`);
+                this.steps.forEach((step, index) => {
+                    const statusObj = statusMap[step.status] || statusMap["0"];
+                    const summary = this.stripMarkdown(step.description);
+                    const htmlDesc = marked.parse(step.description || '无描述');
+                    const htmlExpected = marked.parse(step.expected_result || '无预期结果');
+                    const htmlActual = step.actual_result ? marked.parse(step.actual_result) : null;
+                    const isExpanded = index === this.steps.length - 1 ? 'expanded' : '';
+                    const hasShadow = index === this.steps.length - 1 ? 'shadow-md' : '';
 
-            try {
-                ws = new WebSocket(AppConfig.WS_URL);
-                
-                ws.onopen = () => {
-                    isConnected = true;
-                    updateStatus('connected');
-                    chatMessages.innerHTML = '';
-                    addMessage('system', '✅ Connected to iFlow Browser Server');
-                    addLog('success', 'WebSocket connected');
-                };
-
-                ws.onmessage = (e) => {
-                    console.log('WebSocket raw message:', e.data);
-                    try {
-                        const data = JSON.parse(e.data);
-                        console.log('Parsed message type:', data.type, 'data:', data);
-                        handleMessage(data);
-                    } catch (err) {
-                        console.log('Non-JSON message:', e.data);
-                        addMessage('ai', e.data);
-                    }
-                };
-
-                ws.onclose = () => {
-                    isConnected = false;
-                    updateStatus('offline');
-                    addMessage('system', '⚠️ Connection closed');
-                    addLog('info', 'WebSocket disconnected, reconnecting...');
-                    setTimeout(connectWebSocket, 5000);
-                };
-
-                ws.onerror = () => {
-                    updateStatus('offline');
-                    addLog('error', 'WebSocket error');
-                };
-
-            } catch (err) {
-                updateStatus('offline');
-                addLog('error', 'Connection failed: ' + err.message);
-                setTimeout(connectWebSocket, 5000);
-            }
-        }
-
-        function updateStatus(state) {
-            const dot = document.getElementById('ws-dot');
-            const text = document.getElementById('ws-text');
-
-            if (state === 'connected') {
-                dot.className = 'w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_#22c55e]';
-                text.textContent = 'Connected';
-                chatInput.disabled = sendBtn.disabled = false;
-            } else if (state === 'connecting') {
-                dot.className = 'w-2 h-2 bg-yellow-500 rounded-full';
-                text.textContent = 'Connecting...';
-            } else {
-                dot.className = 'w-2 h-2 bg-red-500 rounded-full';
-                text.textContent = 'Offline';
-                chatInput.disabled = sendBtn.disabled = true;
-            }
-        }
-
-// VNC 连接和图像处理
-
-function connectVNC() {
-            if (vncConnected) {
-                return;
-            }
-
-            updateVNCStatus('connecting', '正在连接...', '正在加载 noVNC 并连接 websockify');
-            addLog('info', `Loading noVNC: ${AppConfig.VNC_NOVNC_URL}`);
-
-            try {
-                // 使用 noVNC iframe，它会自动连接到 websockify
-                vncIframe.src = AppConfig.VNC_NOVNC_URL;
-                vncIframe.classList.remove('hidden');
-                vncPlaceholder.classList.add('hidden');
-
-                // 监听 iframe 加载完成
-                vncIframe.onload = () => {
-                    vncConnected = true;
-                    updateVNCStatus('connected', '已连接', 'noVNC 已加载，连接到 websockify');
-                    addLog('success', 'VNC connected via noVNC + websockify');
-                };
-
-                // 监听 iframe 错误
-                vncIframe.onerror = () => {
-                    updateVNCStatus('error', '连接失败', 'noVNC 加载失败');
-                    addLog('error', 'VNC iframe load failed');
-                };
-
-            } catch (err) {
-                updateVNCStatus('error', '连接失败', err.message);
-                addLog('error', 'VNC connection failed: ' + err.message);
-            }
-        }
-
-        function updateVNCStatus(status, text, detail) {
-            vncStatusText.textContent = text;
-
-            // 处理多行错误信息
-            if (detail && detail.includes('\n')) {
-                // 将换行符转换为 HTML 换行
-                vncStatusDetail.innerHTML = detail.replace(/\n/g, '<br>');
-            } else {
-                vncStatusDetail.textContent = detail || '';
-            }
-
-            // 重置动画
-            vncIconBg.classList.remove('animate-pulse');
-
-            switch (status) {
-                case 'connected':
-                    vncStatusDot.style.backgroundColor = '#22c55e';
-                    vncStatusDot.classList.add('animate-pulse');
-                    vncIconBg.style.backgroundColor = '#16a34a';
-                    vncIcon.style.color = '#ffffff';
-                    break;
-                case 'connecting':
-                    vncStatusDot.style.backgroundColor = '#eab308';
-                    vncStatusDot.classList.add('animate-pulse');
-                    vncIconBg.style.backgroundColor = '#eab308';
-                    vncIcon.style.color = '#ffffff';
-                    vncIconBg.classList.add('animate-pulse');
-                    break;
-                case 'disconnected':
-                    vncStatusDot.style.backgroundColor = '#64748b';
-                    vncStatusDot.classList.remove('animate-pulse');
-                    vncIconBg.style.backgroundColor = '#64748b';
-                    vncIcon.style.color = '#ffffff';
-                    break;
-                case 'error':
-                    vncStatusDot.style.backgroundColor = '#ef4444';
-                    vncStatusDot.classList.remove('animate-pulse');
-                    vncIconBg.style.backgroundColor = '#ef4444';
-                    vncIcon.style.color = '#ffffff';
-                    // 显示占位符，隐藏 iframe
-                    vncIframe.classList.add('hidden');
-                    vncPlaceholder.classList.remove('hidden');
-                    break;
-                default:
-                    vncStatusDot.style.backgroundColor = '#ef4444';
-                    vncStatusDot.classList.remove('animate-pulse');
-                    vncIconBg.style.backgroundColor = '#ef4444';
-                    vncIcon.style.color = '#ffffff';
-            }
-        }
-
-function reconnectVNC() {
-            vncConnected = false;
-            vncIframe.src = '';
-            vncIframe.classList.add('hidden');
-            vncPlaceholder.classList.remove('hidden');
-            connectVNC();
-        }
-
-        // ==========================================
-        // 虚拟机控制
-        // ==========================================
-        async function vmControl(action) {
-            const vmName = prompt('请输入虚拟机名称:', 'test-vm');
-            if (!vmName) return;
-
-            addLog('info', `正在${action}虚拟机: ${vmName}`);
-
-            try {
-                const response = await fetch(`http://${HOST}:8082/vm/control`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        action: action,
-                        vm_name: vmName
-                    })
+                    container.innerHTML += `
+                        <div class="mb-3 rounded-lg border ${statusObj.border} ${statusObj.bg} transition-shadow duration-300 ${hasShadow} bg-white">
+                            <div class="px-3 py-2.5 cursor-pointer flex flex-col gap-1.5 select-none" onclick="TestManager.toggleStep(this)">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-bold text-[12px] text-slate-800 flex items-center gap-1.5"><span>${statusObj.icon}</span> Step ${step.step_number}</span>
+                                    <div class="flex items-center gap-2">
+                                        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${statusObj.badge}">${statusObj.text}</span>
+                                        <svg class="w-4 h-4 text-slate-400 rotate-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </div>
+                                </div>
+                                <div class="text-[11px] text-slate-500 truncate pr-6">${summary}</div>
+                            </div>
+                            <div class="step-details ${isExpanded} border-t border-slate-100/80 bg-slate-50/30 rounded-b-lg custom-scrollbar">
+                                <div class="p-4 flex flex-col gap-4">
+                                    <div>
+                                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Description</div>
+                                        <div class="md-prose">${htmlDesc}</div>
+                                    </div>
+                                    <div class="pt-3 border-t border-slate-200 border-dashed">
+                                        <div class="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1.5">Expected</div>
+                                        <div class="md-prose">${htmlExpected}</div>
+                                    </div>
+                                    ${htmlActual ? `
+                                    <div class="pt-3 border-t border-slate-200 border-dashed">
+                                        <div class="text-[10px] font-bold ${step.status === '2' ? 'text-red-500' : 'text-emerald-500'} uppercase tracking-wider mb-1.5">Actual Result</div>
+                                        <div class="md-prose ${step.status === '2' ? 'text-red-700 bg-red-50/50 p-2 rounded border border-red-100' : ''}">${htmlActual}</div>
+                                    </div>` : ''}
+                                </div>
+                            </div>
+                        </div>`;
                 });
+            }
+        };
 
-                const result = await response.json();
+        // 5. AI 通信模块
+        const ChatClient = {
+            ws: null,
+            isConnected: false,
+            elements: {
+                container: document.getElementById('chat-messages'),
+                input: document.getElementById('chat-input'),
+                btn: document.getElementById('send-btn'),
+                dot: document.getElementById('ws-dot'),
+                text: document.getElementById('ws-text')
+            },
 
-                if (result.success) {
-                    addLog('success', result.output);
-                    if (result.state) {
-                        addLog('info', `虚拟机状态: ${result.state}`);
+            init() {
+                this.elements.input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); this.sendMessage(); }
+                });
+                this.connect();
+            },
+
+            async connect() {
+                try {
+                    const response = await fetch(AppConfig.HEALTH_URL, { method: 'GET' });
+                    if (!response.ok) {
+                        this.updateStatus('offline');
+                        setTimeout(() => this.connect(), 5000);
+                        return;
                     }
-                } else {
-                    addLog('error', result.output || '操作失败');
+                } catch (e) {
+                    this.updateStatus('offline');
+                    this.showOfflineMessage();
+                    setTimeout(() => this.connect(), 5000);
+                    return;
                 }
 
-            } catch (error) {
-                addLog('error', `虚拟机控制失败: ${error.message}`);
-            }
-        }
+                this.updateStatus('connecting');
+                Logger.log('info', `Connecting to ${AppConfig.WS_URL}...`);
 
-        function showServiceDependencyInfo() {
-            chatMessages.innerHTML = `
-                <div class="space-y-2 text-xs">
-                    <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">📋 服务依赖</div>
-                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-                        <div class="text-slate-600">
-                            <div class="font-medium mb-1">需要启动以下服务：</div>
-                            <div class="font-mono text-[10px] space-y-1 ml-2">
-                                <div class="text-slate-500">1. iFlow ACP Server:</div>
-                                <div class="text-blue-600 bg-blue-50 px-2 py-1 rounded">iflow --experimental-acp --port 8090</div>
-                                <div class="text-slate-500 mt-2">2. Browser Server:</div>
-                                <div class="text-blue-600 bg-blue-50 px-2 py-1 rounded">uv run python src/server.py</div>
-                            </div>
+                try {
+                    this.ws = new WebSocket(AppConfig.WS_URL);
+                    this.ws.onopen = () => {
+                        this.isConnected = true;
+                        this.updateStatus('connected');
+                        this.elements.container.innerHTML = '';
+                        this.addMessage('system', '✓ Agent protocol active. Ready for instructions.');
+                        Logger.log('success', 'WebSocket connected.');
+                    };
+                    this.ws.onmessage = (e) => this.handleMessage(e.data);
+                    this.ws.onclose = () => {
+                        this.isConnected = false;
+                        this.updateStatus('offline');
+                        Logger.log('error', 'WebSocket disconnected, reconnecting...');
+                        setTimeout(() => this.connect(), 5000);
+                    };
+                    this.ws.onerror = () => { Logger.log('error', 'WebSocket error'); };
+                } catch (err) {
+                    this.updateStatus('offline');
+                    Logger.log('error', 'Connection failed: ' + err.message);
+                    setTimeout(() => this.connect(), 5000);
+                }
+            },
+
+            showOfflineMessage() {
+                if (this.elements.container.children.length <= 1) {
+                    this.elements.container.innerHTML = `
+                        <div class="text-center py-4 text-slate-500 text-[11px]">
+                            <span class="text-red-400">●</span> 服务器离线 - 请启动后端服务
+                            <code class="ml-2 bg-slate-800 px-1.5 py-0.5 rounded text-slate-400">uv run python src/server.py</code>
                         </div>
-                    </div>
-                </div>`;
-        }
+                    `;
+                }
+            },
 
-        function handleMessage(data) {
-            console.log('Received message:', data);
-            
-            if (data.type === 'tool_use' || data.type === 'tool_call') {
-                // 工具调用前，先结束当前的流式消息
-                finishCurrentStreamMessage();
+            updateStatus(state) {
+                const el = this.elements;
+                const statusDot = document.getElementById('status-dot');
+                const statusText = document.getElementById('status-text');
                 
-                // 工具调用消息
+                if (state === 'connected') {
+                    el.dot.className = 'w-2 h-2 bg-green-500 rounded-full animate-pulse';
+                    el.text.textContent = 'Online';
+                    el.text.className = 'text-green-400';
+                    el.input.disabled = el.btn.disabled = false;
+                    statusDot.className = 'w-2 h-2 rounded-full bg-green-500';
+                    statusText.textContent = 'Online';
+                } else if (state === 'connecting') {
+                    el.dot.className = 'w-2 h-2 bg-yellow-500 rounded-full';
+                    el.text.textContent = 'Connecting...';
+                    el.text.className = 'text-yellow-400';
+                    statusDot.className = 'w-2 h-2 rounded-full bg-yellow-500';
+                    statusText.textContent = 'Connecting';
+                } else {
+                    el.dot.className = 'w-2 h-2 bg-red-500 rounded-full';
+                    el.text.textContent = 'Offline';
+                    el.text.className = 'text-red-400';
+                    el.input.disabled = el.btn.disabled = true;
+                    statusDot.className = 'w-2 h-2 rounded-full bg-red-500';
+                    statusText.textContent = 'Offline';
+                }
+            },
+
+            handleMessage(rawData) {
+                try {
+                    const data = JSON.parse(rawData);
+                    if (data.type === 'tool_use' || data.type === 'tool_call') {
+                        this.finishCurrentMessage();
+                        this.handleToolCall(data);
+                    } else if (data.type === 'task_finish') {
+                        this.finishCurrentMessage();
+                        toolCallMessages = {};
+                        Logger.log('success', 'Task finished: ' + (data.stop_reason || 'completed'));
+                    } else if (data.type === 'step') {
+                        TestManager.addStep(data.step);
+                        Logger.log('info', `Step ${data.step.step_number}: ${data.step.description?.substring(0, 50)}...`);
+                    } else if (data.type === 'assistant' || data.type === 'stream' || data.status === 'streaming') {
+                        const chunk = data.chunk || '';
+                        if (chunk) this.updateOrCreateAIMessage(chunk);
+                    } else if (data.type === 'error') {
+                        this.addMessage('system', '✗ Error: ' + (data.error || data.message || 'Unknown error'));
+                        Logger.log('error', data.error || data.message);
+                    } else if (data.chunk || data.full_response) {
+                        this.updateOrCreateAIMessage(data.chunk || '');
+                    } else if (data.content || data.message) {
+                        this.addMessage('ai', data.content || data.message);
+                    }
+                } catch (e) {
+                    this.updateOrCreateAIMessage(rawData);
+                }
+            },
+
+            handleToolCall(data) {
                 const toolName = data.tool || data.tool_name || 'unknown';
                 const toolArgs = data.args || data.arguments || {};
                 const toolStatus = data.status || 'pending';
                 const toolId = data.id || `${toolName}-${Date.now()}`;
                 
-                // 格式化参数显示
-                let argsDisplay = '';
-                if (Object.keys(toolArgs).length > 0) {
-                    argsDisplay = JSON.stringify(toolArgs, null, 2);
-                } else {
-                    argsDisplay = '(no arguments)';
-                }
+                const statusIcons = {
+                    pending: '⏳',
+                    in_progress: '🔄',
+                    completed: '✓',
+                    error: '✗'
+                };
                 
-                // 状态图标
-                let statusIcon = '🔄';
-                let statusColor = 'text-blue-600';
-                if (toolStatus === 'completed') {
-                    statusIcon = '✅';
-                    statusColor = 'text-green-600';
-                } else if (toolStatus === 'error') {
-                    statusIcon = '❌';
-                    statusColor = 'text-red-600';
-                }
+                const s = statusIcons[toolStatus] || statusIcons.pending;
+                const argsStr = Object.keys(toolArgs).length > 0 ? JSON.stringify(toolArgs, null, 2) : '{}';
                 
-                // 检查是否已存在该工具调用的消息
                 const existingMsg = toolCallMessages[toolId];
                 if (existingMsg) {
-                    // 更新现有消息
-                    const contentDiv = existingMsg.querySelector('.tool-content');
-                    if (contentDiv) {
-                        contentDiv.innerHTML = `
-                            <div class="font-bold ${statusColor}">${statusIcon} ${toolName}</div>
-                            <div class="text-[10px] text-slate-400 mt-1">状态: ${toolStatus}</div>
-                            <pre class="text-[9px] bg-slate-100 p-1.5 rounded mt-1 overflow-x-auto">${escapeHtml(argsDisplay)}</pre>
-                        `;
-                    }
+                    existingMsg.querySelector('.status-icon').textContent = s;
                 } else {
-                    // 创建新的工具调用消息
-                    const div = document.createElement('div');
-                    div.className = 'flex justify-start w-full';
-                    div.innerHTML = `
-                        <div class="flex flex-col max-w-[90%]">
-                            <div class="bg-slate-100 border-slate-200 text-slate-600 border p-3 rounded-xl shadow-sm text-xs leading-relaxed">
-                                <div class="tool-content">
-                                    <div class="font-bold ${statusColor}">${statusIcon} ${toolName}</div>
-                                    <div class="text-[10px] text-slate-400 mt-1">状态: ${toolStatus}</div>
-                                    <pre class="text-[9px] bg-slate-100 p-1.5 rounded mt-1 overflow-x-auto">${escapeHtml(argsDisplay)}</pre>
-                                </div>
-                            </div>
-                        </div>`;
-                    chatMessages.appendChild(div);
-                    toolCallMessages[toolId] = div;
+                    this.addMessage('tool', `${s} **${toolName}**\n\`\`\`json\n${argsStr}\n\`\`\``);
+                    Logger.log('cmd', `Tool: ${toolName} - ${toolStatus}`);
                 }
-                
-                addLog('cmd', `Tool: ${toolName} - ${toolStatus}`);
-                
-                // 同时在左侧步骤面板显示工具调用
-                addToolCallToPanel(toolName, toolArgs, toolStatus);
-                
-            } else if (data.type === 'task_finish') {
-                // 使用 task_finish 的 full_response 确保消息完整
-                const finalContent = data.full_response || '';
-                if (finalContent) {
-                    // 确保最终消息内容完整
-                    updateOrCreateAIMessage(finalContent, null, false);
-                }
-                
-                // 重置流式状态
-                isStreaming = false;
-                accumulatedThought = '';  // 重置累积的思考内容
-                
-                // 清理工具调用跟踪
-                toolCallMessages = {};
-                
-                // 延迟移除 streaming-message class，确保内容已更新
-                setTimeout(() => {
-                    const streamingMsg = chatMessages.querySelector('.streaming-message');
-                    if (streamingMsg) {
-                        streamingMsg.classList.remove('streaming-message');
-                    }
-                }, 100);
-                
-                addLog('success', 'Task finished: ' + (data.stop_reason || 'completed'));
-                // 标记当前步骤完成
-                advanceStep();
-                
-            } else if (data.type === 'assistant' || data.type === 'stream' || data.status === 'streaming') {
-                // 处理流式响应
-                const content = data.full_response || data.chunk || data.content || '';
-                const thought = data.thought || null;
-                const isThoughtMessage = data.subtype === 'thought';  // 纯思考消息
-                console.log('Stream content:', content, 'chunk:', data.chunk, 'full:', data.full_response, 'thought:', thought, 'isThought:', isThoughtMessage);
-                
-                // 如果有内容、有思考、或者 chunk 字段存在，都更新消息
-                // 注意：纯思考消息时 content 可能为空，但 thought 有值
-                if (content || thought || data.chunk !== undefined) {
-                    updateOrCreateAIMessage(content, thought, isThoughtMessage);
-                }
-                
-            } else if (data.type === 'plan') {
-                // 计划消息
-                if (data.entries && data.entries.length > 0) {
-                    const planText = data.entries.map((e, i) => `${i + 1}. ${e.content || e}`).join('\n');
-                    addMessage('system', '📋 Plan:\n' + planText);
-                }
-                
-            } else if (data.chunk || data.full_response) {
-                // 兼容其他格式的流式响应
-                updateOrCreateAIMessage(data.full_response || data.chunk);
-                
-            } else if (data.content || data.message) {
-                addMessage('ai', data.content || data.message);
-                
-            } else if (data.type === 'error') {
-                addMessage('system', '❌ Error: ' + (data.error || data.message || 'Unknown error'));
-                addLog('error', data.error || data.message || 'Unknown error');
-            }
-        }
-        
-        // 在左侧面板添加工具调用显示
-        function addToolCallToPanel(toolName, args, status) {
-            const container = document.getElementById('test-steps-container');
-            const toolDiv = document.createElement('div');
-            toolDiv.className = 'mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-[10px]';
-            
-            const statusIcon = status === 'completed' ? '✅' : (status === 'error' ? '❌' : '🔄');
-            const argsStr = Object.keys(args).length > 0 ? JSON.stringify(args) : '{}';
-            
-            toolDiv.innerHTML = `
-                <div class="font-bold text-blue-700">${statusIcon} ${toolName}</div>
-                <div class="text-slate-500 mono text-[9px] mt-1 truncate">${escapeHtml(argsStr)}</div>
-            `;
-            
-            container.insertBefore(toolDiv, container.firstChild);
-        }
+            },
 
-        function sendMessage() {
-            const text = chatInput.value.trim();
-            if (!text || !isConnected) return;
-            
-            addMessage('user', text);
-            chatInput.value = '';
-            addLog('info', `User: ${text}`);
-            
-            try {
-                ws.send(text);
-            } catch (e) {
-                addMessage('system', 'Failed to send message');
-            }
-        }
+            sendMessage() {
+                const text = this.elements.input.value.trim();
+                if (!text || !this.isConnected) return;
+                
+                this.addMessage('user', text);
+                this.elements.input.value = '';
+                Logger.log('info', `User: ${text}`);
+                
+                try { this.ws.send(text); } 
+                catch (e) { this.addMessage('system', '✗ Failed to send command.'); }
+            },
 
-        function quickCommand(cmd) {
-            chatInput.value = cmd;
-            sendMessage();
-        }
-
-        function addMessage(role, content) {
-            const div = document.createElement('div');
-            div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} w-full`;
-            
-            let innerHTML = '';
-            if (role === 'user') {
-                innerHTML = `<div class="bg-blue-600 text-white p-3 rounded-2xl rounded-tr-sm shadow-md text-xs leading-relaxed max-w-[85%] whitespace-pre-wrap">${escapeHtml(content)}</div>`;
-            } else if (role === 'system') {
-                innerHTML = `<div class="w-full text-center my-1"><span class="text-[10px] text-slate-400 bg-white/50 border border-slate-200 px-3 py-1 rounded-full shadow-sm">${escapeHtml(content)}</span></div>`;
-            } else if (role === 'tool') {
-                const parsedHtml = marked.parse(content);
-                innerHTML = `
-                    <div class="flex flex-col max-w-[90%]">
-                        <div class="bg-slate-100 border-slate-200 text-slate-600 border p-3 rounded-xl shadow-sm text-xs leading-relaxed">
-                            <div class="md-prose">${parsedHtml}</div>
-                        </div>
-                    </div>`;
-            } else {
-                const parsedHtml = marked.parse(content);
-                innerHTML = `
-                    <div class="flex flex-col max-w-[90%]">
-                        <span class="text-[10px] font-bold text-slate-400 ml-1 mb-1">AI Agent</span>
-                        <div class="bg-white border-slate-200 text-slate-700 border p-3 rounded-2xl rounded-tl-sm shadow-sm text-xs leading-relaxed">
-                            <div class="md-prose">${parsedHtml}</div>
-                        </div>
-                    </div>`;
-            }
-
-            div.innerHTML = innerHTML;
-            chatMessages.appendChild(div);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        // 流式消息处理：更新或创建 AI 消息
-        let isStreaming = false;
-        
-        // 存储累积的思考内容
-        let accumulatedThought = '';
-        
-        // 工具调用跟踪：用于更新工具状态而非创建新消息
-        let currentToolCallId = null;
-        let toolCallMessages = {};  // 存储工具调用消息的引用
-        
-        // 用于跟踪当前流式消息的本地内容（不依赖后端的 full_response）
-        let currentStreamContent = '';
-        
-        function updateOrCreateAIMessage(content, thought, isThoughtMessage = false) {
-            console.log('=== updateOrCreateAIMessage START ===');
-            console.log('content:', content ? `"${content.substring(0, 100)}..." (${content.length} chars)` : '(empty)');
-            console.log('thought:', thought ? `"${thought.substring(0, 50)}..."` : '(none)');
-            console.log('isThoughtMessage:', isThoughtMessage);
-            console.log('isStreaming:', isStreaming);
-            
-            // 查找最后一条正在流式传输的 AI 消息
-            const streamingMsg = chatMessages.querySelector('.streaming-message');
-            console.log('Found streamingMsg:', !!streamingMsg);
-            
-            // 构建显示内容 - 直接使用传入的 content（后端传来的 full_response 或 chunk）
-            let displayHTML = '';
-            
-            // 如果有思考内容，显示在前面
-            if (thought && thought.trim()) {
-                displayHTML += `
-                    <div class="thought-section bg-amber-50 border border-amber-200 rounded-lg p-2 mb-2 text-[10px]">
-                        <div class="font-bold text-amber-700 mb-1 flex items-center gap-1">
-                            <span>💭</span> 思考过程
-                        </div>
-                        <div class="text-amber-800 whitespace-pre-wrap">${escapeHtml(thought)}</div>
-                    </div>`;
-            }
-            
-            // 显示主内容
-            if (content && content.trim()) {
-                try {
-                    const parsedContent = marked.parse(content);
-                    displayHTML += `<div class="md-prose">${parsedContent}</div>`;
-                    console.log('Parsed markdown successfully, parsed length:', parsedContent.length);
-                } catch (e) {
-                    console.error('Markdown parse error:', e);
-                    displayHTML += `<div class="md-prose">${escapeHtml(content)}</div>`;
+            finishCurrentMessage() {
+                if (currentAIMessage) {
+                    const cursor = currentAIMessage.querySelector('.cursor-blink');
+                    if (cursor) cursor.remove();
+                    currentAIMessage = null;
                 }
-            } else if (!isThoughtMessage && !thought) {
-                displayHTML += '<div class="md-prose"><span class="text-slate-400 animate-pulse">正在思考...</span></div>';
-            }
-            
-            console.log('displayHTML length:', displayHTML.length);
-            
-            // 检查是否存在 streaming-message 元素
-            if (streamingMsg && isStreaming) {
-                // 更新现有消息
-                const contentDiv = streamingMsg.querySelector('.message-content');
-                console.log('Found contentDiv:', !!contentDiv);
-                if (contentDiv) {
-                    contentDiv.innerHTML = displayHTML;
-                    console.log('Updated existing message HTML');
-                }
-            } else {
-                // 创建新的流式消息
-                isStreaming = true;
+            },
+
+            addMessage(role, content) {
                 const div = document.createElement('div');
-                div.className = 'flex justify-start w-full';
-                div.innerHTML = `
-                    <div class="flex flex-col max-w-[90%] streaming-message">
-                        <span class="text-[10px] font-bold text-slate-400 ml-1 mb-1">AI Agent</span>
-                        <div class="bg-white border-slate-200 text-slate-700 border p-3 rounded-2xl rounded-tl-sm shadow-sm text-xs leading-relaxed">
-                            <div class="message-content">${displayHTML}</div>
-                        </div>
-                    </div>`;
-                chatMessages.appendChild(div);
-                console.log('Created and appended new message');
-            }
-            
-            console.log('chatMessages children count:', chatMessages.children.length);
-            console.log('=== updateOrCreateAIMessage END ===');
-            
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-        
-        // 结束当前流式消息，允许下一个消息创建新气泡
-        function finishCurrentStreamMessage() {
-            const streamingMsg = chatMessages.querySelector('.streaming-message');
-            if (streamingMsg) {
-                streamingMsg.classList.remove('streaming-message');
-            }
-            isStreaming = false;
-            accumulatedThought = '';
-        }
-
-        function updateLastAIMessage(content) {
-            // 兼容旧调用，重定向到新函数
-            updateOrCreateAIMessage(content);
-        }
-
-        // ==========================================
-        // 步骤推进
-        // ==========================================
-        function advanceStep() {
-            const currentIdx = testSteps.findIndex(s => s.status === "1");
-            if (currentIdx >= 0) {
-                testSteps[currentIdx].status = "3"; // Pass
-                if (currentIdx < testSteps.length - 1) {
-                    testSteps[currentIdx + 1].status = "1"; // Running
-                    addLog('info', `Advancing to Step ${currentIdx + 2}`);
+                div.className = 'mb-1.5';
+                
+                if (role === 'user') {
+                    div.innerHTML = `<span class="text-blue-400">›</span> <span class="text-slate-200">${Logger.escape(content)}</span>`;
+                } else if (role === 'system') {
+                    div.innerHTML = `<span class="text-slate-500 text-[11px]">${Logger.escape(content)}</span>`;
+                } else if (role === 'tool') {
+                    const parsedHtml = marked.parse(content);
+                    div.innerHTML = `<div class="md-dark bg-[#1e1e1e] p-2 rounded border border-[#3c3c3c]">${parsedHtml}</div>`;
+                } else {
+                    const parsedHtml = marked.parse(content);
+                    div.innerHTML = `<span class="text-green-400">◆</span> <span class="md-dark">${parsedHtml}</span>`;
+                    // 如果包含 HTML，需要特殊处理
+                    if (parsedHtml.includes('<')) {
+                        div.innerHTML = `<span class="text-green-400">◆</span> <div class="md-dark ml-4">${parsedHtml}</div>`;
+                    }
                 }
-                renderTestSteps();
+
+                this.elements.container.appendChild(div);
+                this.elements.container.scrollTop = this.elements.container.scrollHeight;
+            },
+
+            updateOrCreateAIMessage(chunk) {
+                if (!chunk || !chunk.trim()) return;
+                
+                if (!currentAIMessage) {
+                    const div = document.createElement('div');
+                    div.className = 'mb-1.5';
+                    div.innerHTML = `<span class="text-green-400">◆</span> <span class="text-slate-200"><span class="cursor-blink">▊</span></span>`;
+                    this.elements.container.appendChild(div);
+                    currentAIMessage = div;
+                }
+                
+                const textSpan = currentAIMessage.querySelector('span:last-child');
+                const cursor = textSpan.querySelector('.cursor-blink');
+                if (cursor) cursor.remove();
+                
+                textSpan.innerHTML += Logger.escape(chunk);
+                textSpan.innerHTML += '<span class="cursor-blink">▊</span>';
+                
+                this.elements.container.scrollTop = this.elements.container.scrollHeight;
+            },
+
+            clearChat() {
+                this.elements.container.innerHTML = '<div class="text-center text-[11px] text-slate-500 my-2">New conversation started.</div>';
+                toolCallMessages = {};
+                currentAIMessage = null;
             }
+        };
+
+        // 快捷命令
+        function quickCmd(cmd) {
+            document.getElementById('chat-input').value = cmd;
+            ChatClient.sendMessage();
         }
 
-        // ==========================================
-        // 报告生成
-        // ==========================================
-        function submitReport() {
-            const completed = testSteps.filter(s => s.status === "3").length;
-            const rate = Math.round((completed / testSteps.length) * 100);
+        // VNC 连接
+        function connectVNC() {
+            const frame = document.getElementById('vnc-frame');
+            const placeholder = document.getElementById('vnc-placeholder');
+            const vncMsg = document.getElementById('vnc-msg');
             
-            const report = {
-                project: 'cTDP Consistency Test',
-                timestamp: new Date().toISOString(),
-                device: 'Hygon 7002',
-                completionRate: rate,
-                status: rate === 100 ? 'PASSED' : (rate > 0 ? 'IN_PROGRESS' : 'FAILED'),
-                steps: testSteps
+            vncMsg.textContent = 'Connecting...';
+            
+            frame.onload = () => {
+                vncConnected = true;
+                frame.classList.remove('hidden');
+                placeholder.classList.add('hidden');
+                Logger.log('success', 'VNC connected.');
             };
-
-            const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `test_report_${Date.now()}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
             
-            addLog('success', `Report generated: ${rate}% complete`);
+            frame.onerror = () => {
+                vncMsg.textContent = 'Connection failed';
+                Logger.log('error', 'VNC connection failed.');
+            };
         }
 
-        // ==========================================
-        // 初始化
-        // ==========================================
+        // 启动引导
         document.addEventListener('DOMContentLoaded', () => {
-            // 渲染测试步骤
-            renderTestSteps();
-
-            // 设置默认 Tab
-            switchTab('bios');
-
-            // 连接 WebSocket
-            setTimeout(connectWebSocket, 500);
-
-            // 快捷键监听
-            chatInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && e.ctrlKey) {
-                    e.preventDefault();
-                    sendMessage();
-                }
-            });
+            UI.switchTab('console');
+            setTimeout(() => ChatClient.init(), 500);
+            setTimeout(connectVNC, 1000);
         });
+
     </script>
 </body>
 </html>
